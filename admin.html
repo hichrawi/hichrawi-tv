@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>HICHRAWI TV — لوحة الإدارة</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&family=VT323&display=swap" rel="stylesheet">
+  <style>
+    :root{--bg:#070807;--panel:#0d100e;--line:#293029;--text:#e8eee8;--muted:#8b968c;--amber:#ffb000;--teal:#3fe0c5;--red:#ff4d4d}
+    *{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at top,#121812 0,#070807 48%);color:var(--text);font-family:Cairo,Arial,sans-serif;min-height:100vh}
+    .wrap{max-width:1180px;margin:auto;padding:28px 18px 60px}
+    .top{display:flex;align-items:center;justify-content:space-between;gap:15px;border-bottom:1px solid var(--line);padding-bottom:18px}
+    .brand{display:flex;align-items:center;gap:12px}.brand img{width:48px;height:48px;object-fit:contain}.brand strong{display:block;color:var(--amber);font-size:20px}.brand small{color:var(--muted)}
+    .logout{border:1px solid var(--line);background:#101410;color:var(--text);padding:9px 14px;cursor:pointer;font-family:inherit}.logout:hover{border-color:var(--red);color:var(--red)}
+    .login{max-width:430px;margin:10vh auto 0;border:1px solid var(--line);background:rgba(13,16,14,.95);padding:28px;box-shadow:0 15px 50px #000}
+    .login h1{text-align:center;color:var(--amber);margin:0 0 6px}.login p{text-align:center;color:var(--muted);font-size:13px}
+    label{display:block;color:var(--muted);font-size:12px;margin:16px 0 6px}
+    input{width:100%;background:#070907;border:1px solid var(--line);color:var(--text);padding:12px;border-radius:0;font:inherit;outline:0}
+    input:focus{border-color:var(--amber)}button.primary{width:100%;margin-top:18px;background:var(--amber);color:#111;border:0;padding:12px;font-weight:800;cursor:pointer;font-family:inherit}
+    .msg{min-height:22px;color:var(--red);font-size:12px;margin-top:10px;text-align:center}
+    .dashboard{display:none}.hero{margin:28px 0}.hero h1{margin:0;color:var(--amber);font-size:32px}.hero p{color:var(--muted);margin:5px 0}
+    .cards{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}.card{border:1px solid var(--line);background:var(--panel);padding:18px}.card span{display:block;color:var(--muted);font-size:11px}.card strong{display:block;color:var(--teal);font-size:24px;margin-top:5px}
+    .grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:14px}.panel{border:1px solid var(--line);background:var(--panel);padding:20px}.panel h2{font-size:17px;color:var(--amber);margin:0 0 12px}.panel p{color:var(--muted);font-size:13px;line-height:1.8}
+    .item{display:flex;align-items:center;justify-content:space-between;gap:12px;border-top:1px solid var(--line);padding:12px 0}.badge{font-family:VT323,monospace;color:var(--teal);direction:ltr}
+    .links{display:flex;gap:8px;flex-wrap:wrap}.links a{border:1px solid var(--line);color:var(--text);text-decoration:none;padding:8px 12px;font-size:12px}.links a:hover{border-color:var(--amber);color:var(--amber)}
+    .notice{border:1px dashed var(--amber);padding:14px;color:var(--muted);font-size:12px;line-height:1.8;margin-top:15px}.notice b{color:var(--amber)}
+    @media(max-width:800px){.cards{grid-template-columns:repeat(2,1fr)}.grid{grid-template-columns:1fr}.top{align-items:flex-start}.hero h1{font-size:27px}}
+    @media(max-width:460px){.cards{grid-template-columns:1fr}.wrap{padding-inline:12px}}
+  </style>
+
+<style>
+.source-panel input{margin-top:2px;direction:ltr;text-align:left}
+.source-actions{display:flex;gap:8px;margin-top:12px}
+.small-btn{width:auto!important;margin-top:0!important;padding:9px 14px!important}
+.secondary-btn{background:#101410;color:var(--text);border:1px solid var(--line);padding:9px 14px;cursor:pointer;font-family:inherit}
+.secondary-btn:hover{border-color:var(--amber);color:var(--amber)}
+.source-msg{min-height:22px;color:var(--teal);font-size:12px;margin-top:8px}
+</style>
+
+
+<style>
+.source-panel select{
+ width:100%;
+ background:#070907;
+ border:1px solid var(--line);
+ color:var(--text);
+ padding:12px;
+ font:inherit;
+ margin-bottom:8px;
+}
+</style>
+
+</head>
+<body>
+  <div id="loginView" class="login">
+    <h1>HICHRAWI TV</h1>
+    <p>لوحة الإدارة</p>
+    <form id="loginForm">
+      <label for="email">البريد الإلكتروني</label>
+      <input id="email" type="email" autocomplete="username" required placeholder="admin@example.com">
+      <label for="password">كلمة المرور</label>
+      <input id="password" type="password" autocomplete="current-password" required placeholder="••••••••">
+      <button class="primary" type="submit">دخول إلى لوحة الإدارة</button>
+      <div id="loginMsg" class="msg"></div>
+    </form>
+  </div>
+
+  <main id="dashboard" class="dashboard wrap">
+    <header class="top">
+      <div class="brand">
+        <img src="hichrawi-logo.png" alt="HICHRAWI TV">
+        <div><strong>HICHRAWI TV</strong><small>لوحة الإدارة</small></div>
+      </div>
+      <button id="logoutBtn" class="logout">تسجيل الخروج</button>
+    </header>
+
+    <section class="hero">
+      <h1>لوحة التحكم</h1>
+      <p>من هنا باش نتحكمو في الموقع والبث والمحتوى.</p>
+    </section>
+
+    <section class="cards">
+      <div class="card"><span>حالة البث</span><strong id="statStream">—</strong></div>
+      <div class="card"><span>المصدر الحالي</span><strong id="statSource">—</strong></div>
+      <div class="card"><span>الفيديوهات</span><strong id="statVideos">0</strong></div>
+      <div class="card"><span>المستخدم</span><strong id="statUser">ADMIN</strong></div>
+    </section>
+
+    <section class="grid">
+      <article class="panel source-panel">
+        <h2>📺 إدارة البث</h2>
+        <div class="item"><span>Live HLS</span><span class="badge">SOURCE</span></div>
+        <label for="sourceUrl">رابط Source البث (M3U8)</label>
+        <label for="sourceType">نوع المصدر</label>
+        <select id="sourceType">
+          <option value="iptv">IPTV / M3U8</option>
+          <option value="youtube">YouTube</option>
+          <option value="playlist">YouTube Playlist</option>
+          <option value="video">فيديو من السيرفر</option>
+        </select>
+
+        <label for="sourceUrl">رابط المصدر</label>
+        <input id="sourceUrl" type="url" placeholder="https://example.com/stream.m3u8" dir="ltr">
+        <div class="source-actions">
+          <button id="saveSource" class="primary small-btn">💾 حفظ الـSource</button>
+          <button id="resetSource" class="secondary-btn">↩ المصدر الأصلي</button>
+        </div>
+        <div id="sourceMsg" class="source-msg"></div>
+        <div class="notice"><b>ملاحظة:</b> التغيير هنا يبدّل مصدر المشاهدة في الموقع. يلزم أن يكون الرابط M3U8 صالحًا ومسموحًا بالـCORS.</div>
+      </article>
+
+      <article class="panel">
+        <h2>🎬 إدارة الفيديوهات</h2>
+        <div class="item"><span>رفع فيديو</span><span class="badge">UPLOAD</span></div>
+        <div class="item"><span>حذف فيديو</span><span class="badge">DELETE</span></div>
+        <p>باش نضيفو الرفع والحذف في المرحلة القادمة بعد تحديد مكان تخزين الفيديوهات.</p>
+        <div class="notice"><b>مهم:</b> ما نرفعوش فيديوهات كبيرة إلى Firebase Hosting، باش نستخدمو Storage/سيرفر مناسب.</div>
+      </article>
+
+      <article class="panel">
+        <h2>🌐 الموقع</h2>
+        <div class="links">
+          <a href="index.html">البث المباشر</a>
+          <a href="about.html">حول القناة</a>
+          <a href="contact.html">اتصل بنا</a>
+        </div>
+      </article>
+
+      <article class="panel">
+        <h2>⚙️ الإعدادات</h2>
+        <div class="item"><span>معلومات الاتصال</span><span class="badge">READY</span></div>
+        <div class="item"><span>Facebook / TikTok</span><span class="badge">READY</span></div>
+        <div class="item"><span>YouTube / Instagram</span><span class="badge">SOON</span></div>
+      </article>
+    </section>
+  </main>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/12.17.1/firebase-app.js";
+    import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/12.17.1/firebase-auth.js";
+    import { getFirestore, doc, getDoc, setDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.17.1/firebase-firestore.js";
+    import { firebaseConfig } from "./admin-config.js";
+
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getFirestore(app);
+    const DEFAULT_SOURCE = "https://hichrawi-tv-production.up.railway.app/stream.m3u8";
+    const loginView = document.getElementById("loginView");
+    const dashboard = document.getElementById("dashboard");
+    const msg = document.getElementById("loginMsg");
+
+    onAuthStateChanged(auth, user => {
+      if(user){
+        loginView.style.display="none";
+        dashboard.style.display="block";
+        document.getElementById("statUser").textContent=(user.email||"ADMIN").split("@")[0].toUpperCase();
+        document.getElementById("statStream").textContent="ONLINE";
+        document.getElementById("statSource").textContent="HLS";
+      }else{
+        loginView.style.display="block";
+        dashboard.style.display="none";
+      }
+    });
+
+    async function loadSource(){
+      try{
+        const snap = await getDoc(doc(db,"settings","stream"));
+        const url = snap.exists() && snap.data().url ? snap.data().url : DEFAULT_SOURCE;
+        document.getElementById("sourceUrl").value = url;
+        if(snap.exists() && snap.data().type) document.getElementById("sourceType").value = snap.data().type;
+        document.getElementById("statSource").textContent = url.includes("m3u8") ? "M3U8" : "URL";
+      }catch(err){
+        document.getElementById("sourceMsg").textContent = "فعّل Firestore أولًا في Firebase.";
+        document.getElementById("sourceUrl").value = DEFAULT_SOURCE;
+      }
+    }
+
+    document.getElementById("saveSource").addEventListener("click", async ()=>{
+      const url = document.getElementById("sourceUrl").value.trim();
+      const out = document.getElementById("sourceMsg");
+      if(!/^https?:\/\//i.test(url) || !url){
+        out.style.color="var(--red)";
+        out.textContent="أدخل رابط Source صحيح يبدأ بـ http أو https.";
+        return;
+      }
+      try{
+        const type = document.getElementById("sourceType").value;
+        await setDoc(doc(db,"settings","stream"),{url,type,updatedAt:serverTimestamp()},{merge:true});
+        out.style.color="var(--teal)";
+        out.textContent="تم حفظ الـSource بنجاح.";
+        document.getElementById("statSource").textContent = url.includes("m3u8") ? "M3U8" : "URL";
+      }catch(err){
+        out.style.color="var(--red)";
+        out.textContent="فشل الحفظ. تأكد أن Firestore مفعّل.";
+      }
+    });
+
+    document.getElementById("resetSource").addEventListener("click", async ()=>{
+      document.getElementById("sourceUrl").value=DEFAULT_SOURCE;
+      document.getElementById("sourceMsg").style.color="var(--muted)";
+      document.getElementById("sourceMsg").textContent="تم وضع المصدر الأصلي. اضغط حفظ لتفعيله.";
+    });
+
+    document.getElementById("loginForm").addEventListener("submit", async e => {
+      e.preventDefault();
+      msg.textContent="جارٍ تسجيل الدخول...";
+      try{
+        await signInWithEmailAndPassword(auth, email.value.trim(), password.value);
+        msg.textContent="";
+      }catch(err){
+        msg.textContent="بيانات الدخول غير صحيحة أو Firebase Auth غير مفعّل.";
+      }
+    });
+
+    document.getElementById("logoutBtn").addEventListener("click",()=>signOut(auth));
+    onAuthStateChanged(auth, user => { if(user) loadSource(); });
+  </script>
+</body>
+</html>
