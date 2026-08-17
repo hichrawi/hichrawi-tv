@@ -265,11 +265,12 @@ function ensureSourceSwitchStatus(){
   if(el) return el;
 
   // Put the status immediately above the source control area if possible.
-  const anchor = document.querySelector("#sourcesSection") ||
-                 document.querySelector(".source-manager") ||
+  const anchor = document.querySelector("main") ||
+                 document.querySelector(".container") ||
                  document.body;
   el = document.createElement("div");
   el.id = "sourceSwitchStatus";
+  el.style.margin = "12px 0";
   anchor.prepend(el);
   return el;
 }
@@ -343,15 +344,14 @@ window.startHichrawiSource = async(id)=>{
     }
 
     const source = snap.data();
-    let items = [];
+    const sourceType = String(source.type || "iptv").toLowerCase();
 
-    // Resolve a video playlist into concrete server/local URLs.
-    if(source.type === "videos"){
+    let items = [];
+    if(sourceType === "videos"){
       if(!source.libraryId){
         alert("❌ لم يتم تحديد قائمة تشغيل للفيديوهات");
         return;
       }
-
       const pSnap = await getDoc(doc(db,"playlists",source.libraryId));
       if(!pSnap.exists()){
         alert("❌ قائمة التشغيل غير موجودة");
@@ -363,10 +363,8 @@ window.startHichrawiSource = async(id)=>{
         const vSnap = await getDoc(doc(db,"videos",videoId));
         if(!vSnap.exists()) continue;
         const v = vSnap.data();
-
-        // Prefer serverPath for videos already stored on Railway.
         if(v.serverPath){
-          items.push("/videos/" + encodeURIComponent(v.serverPath).replace(/%2F/g,"/"));
+          items.push("/videos/" + String(v.serverPath).split("/").map(encodeURIComponent).join("/"));
         }else if(v.url){
           items.push(v.url);
         }
@@ -378,43 +376,52 @@ window.startHichrawiSource = async(id)=>{
       }
     }
 
-    const user = auth.currentUser;
-    if(!user){
-      alert("❌ انتهت جلسة الإدارة. سجل الدخول من جديد.");
+    if(sourceType === "iptv" && !String(source.url || "").trim()){
+      alert("❌ رابط IPTV فارغ");
       return;
     }
 
-    const idToken = await user.getIdToken();
+    showSourceSwitchStatus(
+      "pending",
+      "🟡 تم إرسال الطلب... محرك البث يجهز المصدر الجديد. لا تضغط تشغيل مرة أخرى."
+    );
 
-    const request = {
-      type: source.type || "iptv",
-      name: source.name || "",
-      url: source.type === "iptv" ? (source.url || "") : "",
+    const payload = {
+      type: sourceType,
+      name: source.name || "مصدر جديد",
+      url: sourceType === "iptv" ? String(source.url || "").trim() : "",
       items,
       requestedAt: Date.now()
     };
 
-    showSourceSwitchStatus(
-      "pending",
-      "🟡 تم إرسال المصدر الجديد... جاري تحضيره قبل تبديل البث."
-    );
+    console.log("[HICHRAWI] Sending source request:", payload);
 
-    const response = await fetch(STREAM_ENGINE_URL + "/api/source",{
+    // IMPORTANT: call the Railway engine directly.
+    const response = await fetch(STREAM_ENGINE_URL + "/api/source?ts=" + Date.now(), {
       method:"POST",
+      mode:"cors",
+      cache:"no-store",
       headers:{
-        "Content-Type":"application/json",
-        "Authorization":"Bearer " + idToken,
-        "X-Firebase-Api-Key": firebaseConfig.apiKey
+        "Content-Type":"application/json"
       },
-      body:JSON.stringify(request)
+      body:JSON.stringify(payload)
     });
 
+    const responseText = await response.text();
+    console.log("[HICHRAWI] Railway response:", response.status, responseText);
+
     if(!response.ok){
-      const text=await response.text();
-      throw new Error(text || ("HTTP "+response.status));
+      throw new Error("Railway API HTTP " + response.status + ": " + responseText);
     }
 
-    // Mark the requested source in Firestore without changing the old URL blindly.
+    let accepted = {};
+    try{ accepted = JSON.parse(responseText); }catch(_){}
+
+    if(accepted.ok !== true){
+      throw new Error("Railway لم يؤكد استلام طلب تغيير المصدر.");
+    }
+
+    // This is only the UI/Firebase label; the real confirmation comes from /api/status.
     const all = await getDocs(collection(db,"broadcastSources"));
     await Promise.all(all.docs.map(item =>
       updateDoc(doc(db,"broadcastSources",item.id),{
@@ -427,21 +434,22 @@ window.startHichrawiSource = async(id)=>{
     await setDoc(doc(db,"settings","stream"),{
       activeSourceId:id,
       activeSourceName:source.name||"",
-      activeSourceType:source.type||"iptv",
-      requestedSource:source.type==="videos" ? (source.libraryId||"") : (source.url||""),
-      activeLibraryId:source.libraryId||"",
-      sourceStatus:"pending",
+      activeSourceType:sourceType,
+      sourceStatus:"switching",
       sourceRequestedAt:new Date()
     },{merge:true});
 
     await loadBroadcastSources();
 
-    // Do not rely on the Firestore "active" badge.
-    // Poll the real engine state until it reports switched/failed.
-    waitForSourceSwitch(source.name || "");
+    // Wait for the actual FFmpeg/HLS engine result.
+    await waitForSourceSwitch(source.name || "");
   }catch(error){
     console.error("startHichrawiSource:",error);
-    alert("❌ تعذر إرسال المصدر إلى محرك البث.\n"+(error.message||""));
+    showSourceSwitchStatus(
+      "error",
+      "🔴 فشل إرسال طلب تغيير المصدر: " + (error.message || "خطأ غير معروف")
+    );
+    alert("❌ لم يتم إرسال طلب تغيير المصدر.\n" + (error.message || ""));
   }
 };
 
