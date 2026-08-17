@@ -1,11 +1,17 @@
-HICHRAWI TV — Static Website
+# HICHRAWI-TV FINAL V2
 
-Files:
-- index.html: live TV page based on the uploaded retro CRT template.
-- about.html: about page.
-- contact.html: contact page.
+Supported sources:
+- IPTV / HLS / M3U8
+- M3U playlist URL
+- Direct MP4/video URL
+- Radio / MP3 / AAC (audio is preserved with a black video canvas)
+- RTMP
+- RTSP over TCP
+- YouTube URL (resolved by yt-dlp)
+- Local video playlists in /app/videos
 
+Safe switching:
+The engine prepares a new source in an inactive HLS directory first. It switches only after the new playlist has valid segments. If preparation fails, the current source remains active.
 
-
-Deploy:
-Upload the contents of this folder to Cloudflare Pages using Direct Upload.
+Important:
+Use only streams/media you are authorized to rebroadcast.
