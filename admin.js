@@ -10,7 +10,8 @@ const db = getFirestore(app);
 
 // Railway stream engine API
 const STREAM_ENGINE_URL = "https://hichrawi-tv-production.up.railway.app";
-<style>
+const sourceStatusStyle = document.createElement("style");
+sourceStatusStyle.textContent = `
 #sourceSwitchStatus{
   margin:14px 0 0;padding:13px 16px;border-radius:10px;
   background:#1b1b1b;border:1px solid #444;color:#ddd;
@@ -19,7 +20,8 @@ const STREAM_ENGINE_URL = "https://hichrawi-tv-production.up.railway.app";
 #sourceSwitchStatus.pending{display:block;border-color:#d99f00;color:#ffd45a}
 #sourceSwitchStatus.success{display:block;border-color:#21a366;color:#52e58f}
 #sourceSwitchStatus.error{display:block;border-color:#c0392b;color:#ff7b72}
-</style>
+`;
+document.head.appendChild(sourceStatusStyle);
 
 const storage = getStorage(app);
 
