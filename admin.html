@@ -896,9 +896,14 @@ style="width:100%;padding:12px;margin-top:10px;background:#222;color:white;borde
                     <label>نوع المصدر</label>
                     <select id="sourceType" class="source-select"
                             onchange="updateSourceForm()">
-                        <option value="iptv">📡 IPTV</option>
+                        <option value="iptv">📡 IPTV / M3U8</option>
+                        <option value="m3u">📋 M3U Playlist</option>
+                        <option value="direct_video">🎞️ فيديو مباشر MP4</option>
+                        <option value="radio">📻 Radio / MP3 / AAC</option>
+                        <option value="rtmp">🔴 RTMP</option>
+                        <option value="rtsp">🟣 RTSP</option>
                         <option value="youtube">▶️ YouTube</option>
-                        <option value="videos">🎬 فيديوهاتي</option>
+                        <option value="videos">🎬 فيديوهاتي / Playlist</option>
                     </select>
                 </div>
 
@@ -915,19 +920,23 @@ style="width:100%;padding:12px;margin-top:10px;background:#222;color:white;borde
                     <label>رابط قناة YouTube أو Playlist</label>
                     <input id="youtubeUrl" class="source-input"
                            placeholder="https://www.youtube.com/@... أو Playlist">
-                    <div class="source-help">
-                        هذا يحفظ رابط YouTube كمصدر. تشغيل فيديوهات YouTube فعلياً
-                        سيتم ربطه لاحقاً بمحرك البث، وليس عبر تشغيل صفحة YouTube مباشرة.
-                    </div>
+                    <div class="source-help">يتم استعمال الرابط كمصدر YouTube عبر محرك البث.</div>
+                </div>
+
+                <div class="source-full" id="genericSourceFields" style="display:none">
+                    <label id="genericSourceLabel">رابط المصدر</label>
+                    <input id="genericUrl" class="source-input"
+                           placeholder="ضع رابط المصدر">
+                    <div class="source-help" id="genericSourceHelp"></div>
                 </div>
 
                 <div class="source-full" id="videosSourceFields" style="display:none">
                     <label>مكتبة الفيديوهات</label>
                     <select id="videosLibrary" class="source-select">
-                        <option value="default">🎬 فيديوهاتي</option>
+                        <option value="">اختر قائمة تشغيل</option>
                     </select>
                     <div class="source-help">
-                        المصدر سيستعمل قائمة التشغيل المختارة، وتشغّل الفيديوهات بالتتابع. الرفع يتم عبر Firebase Storage.
+                        المصدر يستعمل قائمة التشغيل المختارة ويشغّل الفيديوهات بالتتابع.
                     </div>
                 </div>
             </div>
@@ -1311,20 +1320,39 @@ window.addEventListener('load', function(){
 
 <script>
 function updateSourceForm(){
-    const type = document.getElementById('sourceType')?.value;
+    const type = document.getElementById('sourceType')?.value || 'iptv';
     const iptv = document.getElementById('iptvSourceFields');
     const youtube = document.getElementById('youtubeSourceFields');
+    const generic = document.getElementById('genericSourceFields');
     const videos = document.getElementById('videosSourceFields');
 
-    if(!iptv || !youtube || !videos) return;
+    if(iptv) iptv.style.display = type === 'iptv' ? 'block' : 'none';
+    if(youtube) youtube.style.display = type === 'youtube' ? 'block' : 'none';
+    if(videos) videos.style.display = type === 'videos' ? 'block' : 'none';
 
-    iptv.style.display = type === 'iptv' ? 'block' : 'none';
-    youtube.style.display = type === 'youtube' ? 'block' : 'none';
-    videos.style.display = type === 'videos' ? 'block' : 'none';
+    const genericTypes = ['m3u','direct_video','radio','rtmp','rtsp'];
+    if(generic) generic.style.display = genericTypes.includes(type) ? 'block' : 'none';
+
+    const label = document.getElementById('genericSourceLabel');
+    const input = document.getElementById('genericUrl');
+    const help = document.getElementById('genericSourceHelp');
+
+    const meta = {
+      m3u: ['رابط M3U Playlist','ضع رابط ملف M3U أو M3U8','قائمة قنوات خارجية.'],
+      direct_video: ['رابط فيديو مباشر','https://.../video.mp4','رابط فيديو مباشر تملك حق إعادة بثه.'],
+      radio: ['رابط Radio / MP3 / AAC','https://.../stream.mp3','سيتم تحويل الصوت إلى قناة HLS مع صورة سوداء وشعار.'],
+      rtmp: ['رابط RTMP','rtmp://...','مصدر RTMP مباشر.'],
+      rtsp: ['رابط RTSP','rtsp://...','مصدر RTSP، ويُستخدم TCP للنقل.']
+    };
+    if(meta[type]){
+      if(label) label.textContent = meta[type][0];
+      if(input) input.placeholder = meta[type][1];
+      if(help) help.textContent = meta[type][2];
+    }
 }
 
 function clearBroadcastSourceForm(){
-    ['sourceName','sourceUrl','youtubeUrl'].forEach(id=>{
+    ['sourceName','sourceUrl','youtubeUrl','genericUrl'].forEach(id=>{
         const el=document.getElementById(id);
         if(el) el.value='';
     });
@@ -1353,6 +1381,8 @@ async function saveBroadcastSource(){
     let url='';
     if(type==='iptv') url=(document.getElementById('sourceUrl')?.value || '').trim();
     if(type==='youtube') url=(document.getElementById('youtubeUrl')?.value || '').trim();
+    if(['m3u','direct_video','radio','rtmp','rtsp'].includes(type))
+        url=(document.getElementById('genericUrl')?.value || '').trim();
 
     if(!name){
         setSourceManagerMessage('اكتب اسم المصدر أولاً.', true);
