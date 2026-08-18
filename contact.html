@@ -1,0 +1,686 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="اتصل بنا - HICHRAWI-TV">
+<title>اتصل بنا | HICHRAWI-TV</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+
+:root{
+  --bg:#03070d;
+  --panel:#07111b;
+  --panel2:#091621;
+  --line:#172735;
+  --red:#ef233c;
+  --red2:#ff3148;
+  --yellow:#ffbf00;
+  --white:#f6f8fb;
+  --muted:#9aa8b5;
+  --green:#22c55e;
+  --blue:#1687ff;
+  --max:1180px;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  margin:0;
+  min-height:100vh;
+  background:
+    radial-gradient(circle at 80% 18%,rgba(239,35,60,.10),transparent 28%),
+    radial-gradient(circle at 10% 42%,rgba(22,135,255,.07),transparent 25%),
+    linear-gradient(180deg,#02060b 0%,#050b12 55%,#03070d 100%);
+  color:var(--white);
+  font-family:"Cairo",sans-serif;
+}
+body::before{
+  content:"";position:fixed;inset:0;pointer-events:none;opacity:.22;
+  background-image:
+    linear-gradient(rgba(255,255,255,.018) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(255,255,255,.014) 1px,transparent 1px);
+  background-size:34px 34px;
+}
+a{color:inherit;text-decoration:none}
+button{font:inherit}
+.container{width:min(var(--max),calc(100% - 32px));margin:auto}
+.vt{font-family:monospace;direction:ltr}
+
+.topbar{
+  border-bottom:1px solid var(--line);
+  background:#02070c;
+  color:#d9e0e6;
+  font-size:12px;
+}
+.topbar-inner{
+  min-height:40px;display:flex;align-items:center;justify-content:space-between;gap:15px;
+}
+.live-mini{display:flex;align-items:center;gap:8px}
+.live-mini-dot{
+  width:9px;height:9px;border-radius:50%;background:var(--red);
+  box-shadow:0 0 12px rgba(239,35,60,.7);animation:pulse 1.4s infinite;
+}
+.header{
+  position:sticky;top:0;z-index:100;
+  background:rgba(3,7,13,.94);backdrop-filter:blur(16px);
+  border-bottom:1px solid var(--line);
+}
+.header-inner{
+  min-height:94px;display:flex;align-items:center;gap:25px;
+}
+.brand{display:flex;align-items:center;gap:12px;min-width:max-content}
+.brand img{width:72px;height:72px;object-fit:contain}
+.brand-name{font-size:22px;font-weight:800;letter-spacing:.2px}
+.brand-name span{color:var(--red)}
+.brand-sub{color:var(--yellow);font-size:11px;font-weight:700;margin-top:-3px}
+.nav{display:flex;align-items:center;justify-content:center;gap:4px;flex:1}
+.nav a{
+  position:relative;padding:12px 18px;color:#d4dbe1;font-size:14px;font-weight:700;
+}
+.nav a::after{
+  content:"";position:absolute;left:18px;right:18px;bottom:2px;height:2px;
+  background:var(--red);transform:scaleX(0);transition:.2s;
+}
+.nav a:hover,.nav a.active{color:#fff}
+.nav a:hover::after,.nav a.active::after{transform:scaleX(1)}
+.header-actions{display:flex;align-items:center;gap:10px}
+.live-button{
+  display:inline-flex;align-items:center;gap:8px;padding:12px 18px;
+  border-radius:7px;background:linear-gradient(135deg,#ff253c,#d70d25);
+  color:#fff;font-weight:800;font-size:13px;box-shadow:0 8px 25px rgba(239,35,60,.18);
+}
+.live-button:hover{filter:brightness(1.08)}
+.clock-box{
+  border:1px solid var(--line);border-radius:7px;padding:8px 12px;
+  color:var(--yellow);font-size:16px;min-width:90px;text-align:center;
+}
+
+.hero{padding:42px 0 24px}
+.hero-grid{
+  display:flex;flex-direction:column;align-items:center;gap:28px;
+}
+.hero-copy .eyebrow{
+  display:inline-flex;align-items:center;gap:8px;color:#fff;
+  background:rgba(239,35,60,.13);border:1px solid rgba(239,35,60,.35);
+  padding:7px 11px;border-radius:5px;font-size:11px;font-weight:800;
+}
+.hero-copy h1{font-size:clamp(38px,5vw,66px);line-height:1.05;margin:16px 0 5px;font-weight:800}
+.hero-copy h1 span{color:var(--red)}
+.hero-copy h2{color:var(--yellow);font-size:24px;margin:0 0 12px}
+.hero-copy{width:100%;text-align:center;display:flex;flex-direction:column;align-items:center}
+.hero-copy p{color:#c0c9d1;font-size:15px;line-height:2;max-width:760px;margin:0 auto 22px}
+.hero-stats{
+  display:grid;grid-template-columns:repeat(4,1fr);gap:8px;width:min(760px,100%);
+}
+.stat{
+  background:rgba(7,17,27,.9);border:1px solid var(--line);border-radius:7px;
+  padding:12px 8px;text-align:center;
+}
+.stat-icon{font-size:20px;height:27px}
+.stat small{display:block;color:var(--muted);font-size:10px}
+.stat strong{display:block;font-size:15px;margin-top:1px}
+.hero-cta{
+  display:inline-flex;align-items:center;justify-content:center;gap:9px;
+  margin-top:20px;padding:13px 24px;border-radius:7px;
+  background:linear-gradient(135deg,#ff253c,#d70d25);font-size:14px;font-weight:800;
+}
+
+.player-card{
+  position:relative;width:min(1050px,100%);margin:0 auto;border:1px solid rgba(239,35,60,.8);
+  border-radius:10px;padding:8px;background:#000;box-shadow:0 20px 70px rgba(0,0,0,.45);
+}
+.screen{
+  position:relative;width:100%;padding-top:56.25%;overflow:hidden;background:#000;border-radius:5px;
+}
+#player{
+  position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#000;
+}
+.scanlines{
+  position:absolute;inset:0;pointer-events:none;
+  background:repeating-linear-gradient(to bottom,rgba(255,255,255,.025) 0 1px,transparent 2px 4px);
+}
+.vignette{position:absolute;inset:0;pointer-events:none;box-shadow:inset 0 0 75px 12px rgba(0,0,0,.55)}
+.noise{position:absolute;inset:0;pointer-events:none;background:#111;opacity:0;transition:opacity .15s}
+.noise.active{opacity:.65}
+.player-logo{
+  position:absolute;inset:0;margin:auto;width:210px;height:auto;max-height:125px;
+  object-fit:contain;opacity:.9;pointer-events:none;
+}
+.rec-tag{
+  position:absolute;top:14px;left:14px;display:flex;align-items:center;gap:7px;
+  padding:5px 9px;border-radius:4px;background:var(--red);font-size:11px;font-weight:800;
+}
+.rec-dot{width:7px;height:7px;border-radius:50%;background:#fff;animation:pulse 1s infinite}
+.ch-tag{
+  position:absolute;top:14px;right:14px;text-align:center;direction:ltr;
+}
+.ch-tag small{display:block;font-size:10px}
+.ch-tag strong{display:block;font-size:34px;line-height:1}
+.player-actions{position:absolute;bottom:10px;left:10px;display:flex;gap:6px}
+.player-btn{
+  border:0;border-radius:4px;background:rgba(0,0,0,.85);color:#fff;
+  padding:7px 10px;cursor:pointer;font-size:12px;
+}
+.player-btn:hover{background:#151515}
+.player-status{
+  position:absolute;right:10px;bottom:10px;padding:6px 9px;border-radius:4px;
+  background:rgba(0,0,0,.8);color:var(--yellow);font:12px monospace;direction:ltr;
+}
+.player-line{height:3px;background:#242b31;margin:0 8px 7px;position:relative}
+
+/* HICHRAWI-TV announcement ticker */
+.announcement-ticker{display:none;width:min(1050px,100%);margin:-12px auto 0;border:1px solid rgba(255,255,255,.12);border-radius:5px;overflow:hidden;background:#e00000;color:#fff;position:relative;height:46px;align-items:center}
+.announcement-ticker.show{display:flex}
+.announcement-ticker-track{display:inline-block;white-space:nowrap;font-weight:800;padding-left:100%;animation:announcementLTR 18s linear infinite;will-change:transform}
+@keyframes announcementLTR{from{transform:translateX(-100%)}to{transform:translateX(100vw)}}
+@media(max-width:650px){.announcement-ticker{height:40px;margin:0 5px 5px}.announcement-ticker-track{font-size:16px!important}}
+.player-line::after{content:"";display:block;width:18%;height:100%;background:var(--red)}
+
+.info-strip{padding:4px 0 42px}
+.info-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+.info-card{
+  background:rgba(7,17,27,.88);border:1px solid var(--line);border-radius:8px;
+  padding:18px;text-align:center;
+}
+.info-card .big{font-size:23px;margin-bottom:4px}
+.info-card small{display:block;color:var(--muted);font-size:10px}
+.info-card strong{display:block;margin-top:3px;font-size:18px}
+.status-green{color:var(--green)}
+.status-red{color:var(--red)}
+.status-yellow{color:var(--yellow)}
+
+.section{padding:28px 0}
+.section-heading{margin-bottom:18px}
+.section-heading .kicker{color:var(--red);font-size:11px;font-weight:800}
+.section-heading h2{margin:4px 0 0;font-size:27px}
+.section-heading h2::after{
+  content:"";display:block;width:35px;height:2px;background:var(--red);margin-top:7px;
+}
+.about-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+.about-card,.why-card,.social-card,.contact-card{
+  background:rgba(7,17,27,.88);border:1px solid var(--line);border-radius:9px;
+}
+.about-card{display:grid;grid-template-columns:1.15fr .85fr;overflow:hidden}
+.about-content{padding:24px}
+.about-content h3{font-size:26px;margin:0 0 10px}
+.about-content p{color:#aeb9c3;line-height:2;font-size:14px;margin:0}
+.more-link{display:inline-flex;margin-top:15px;color:var(--red);font-weight:800;font-size:13px}
+.about-visual{
+  min-height:250px;display:flex;align-items:center;justify-content:center;
+  background:radial-gradient(circle at center,rgba(239,35,60,.15),transparent 65%);
+}
+.about-visual img{width:75%;max-width:240px;object-fit:contain;filter:drop-shadow(0 12px 24px rgba(0,0,0,.4))}
+.why-card{padding:24px}
+.why-card h3{margin:0 0 13px;font-size:23px}
+.why-list{list-style:none;margin:0;padding:0;display:grid;gap:10px}
+.why-list li{color:#c0cad2;font-size:14px;display:flex;gap:9px;align-items:flex-start}
+.why-list b{color:var(--red)}
+
+.social-card{padding:24px;margin-top:18px}
+.social-heading{display:flex;justify-content:center;margin-bottom:18px}
+.social-heading h3{margin:0;font-size:20px}
+.social-icons{display:flex;justify-content:center;gap:24px;flex-wrap:wrap}
+.social-icon{
+  width:62px;height:62px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+  transition:.2s;border:1px solid rgba(255,255,255,.1);box-shadow:0 8px 20px rgba(0,0,0,.2);
+}
+.social-icon svg{width:30px;height:30px;fill:#fff}
+.social-icon:hover{transform:translateY(-4px) scale(1.04);filter:brightness(1.12)}
+.facebook{background:#1877f2}
+.youtube{background:#ff0000}
+.tiktok{background:#050505}
+.telegram{background:#229ed9}
+.whatsapp{background:#20c863}
+
+.contact-section{padding:30px 0 50px}
+.contact-wrap{
+  background:
+    radial-gradient(circle at 15% 60%,rgba(22,135,255,.07),transparent 30%),
+    rgba(7,17,27,.9);
+  border:1px solid var(--line);border-radius:10px;padding:28px;
+}
+.contact-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.contact-item{padding:15px;border-left:1px solid var(--line)}
+.contact-item:last-child{border-left:0}
+.contact-item .icon{font-size:22px;margin-bottom:7px}
+.contact-item small{display:block;color:var(--muted);font-size:10px}
+.contact-item strong{display:block;margin-top:4px;font-size:13px;direction:ltr}
+.contact-item.address strong{direction:rtl}
+
+.footer{
+  border-top:1px solid var(--line);background:#02060b;padding:32px 0 18px;
+}
+.footer-grid{display:grid;grid-template-columns:1.2fr 1fr 1fr;gap:30px}
+.footer-brand{display:flex;gap:12px;align-items:center}
+.footer-brand img{width:62px;height:62px;object-fit:contain}
+.footer-brand strong{font-size:20px}
+.footer-brand strong span{color:var(--red)}
+.footer-brand small{display:block;color:var(--yellow);font-size:10px}
+.footer-col h4{margin:0 0 12px;font-size:14px}
+.footer-links{display:flex;flex-wrap:wrap;gap:15px}
+.footer-links a{color:#aeb9c3;font-size:12px}
+.footer-links a:hover{color:#fff}
+.footer-social{display:flex;gap:12px}
+.footer-social .social-icon{width:42px;height:42px}
+.footer-social .social-icon svg{width:21px;height:21px}
+.footer-bottom{
+  border-top:1px solid var(--line);margin-top:25px;padding-top:16px;
+  display:flex;justify-content:center;align-items:center;gap:15px;flex-wrap:wrap;
+  color:#87939e;font-size:11px;
+}
+.footer-bottom a{color:var(--red);font-weight:800}
+.footer-sep{color:#36424d}
+
+.guide{display:none}
+
+@keyframes pulse{50%{opacity:.35;transform:scale(.82)}}
+
+@media(max-width:980px){
+  .header-inner{gap:12px}
+  .nav a{padding:10px 10px}
+  .hero-grid{grid-template-columns:1fr}
+  .player-card{order:-1}
+  .about-grid{grid-template-columns:1fr}
+  .footer-grid{grid-template-columns:1fr 1fr}
+}
+@media(max-width:700px){
+  .container{width:min(var(--max),calc(100% - 20px))}
+  .topbar-inner{font-size:10px;min-height:34px}
+  .header-inner{min-height:auto;padding:8px 0;flex-wrap:wrap}
+  .brand{gap:8px}
+  .brand img{width:52px;height:52px}
+  .brand-name{font-size:17px}
+  .brand-sub{font-size:8px}
+  .header-actions{margin-right:auto}
+  .clock-box{display:none}
+  .live-button{font-size:11px;padding:9px 11px}
+  .nav{
+    order:3;width:100%;overflow-x:auto;justify-content:flex-start;
+    border-top:1px solid var(--line);padding-top:5px;scrollbar-width:none
+  }
+  .nav::-webkit-scrollbar{display:none}
+  .nav a{white-space:nowrap;font-size:11px;padding:7px 10px}
+  .nav a::after{left:10px;right:10px}
+
+  .hero{padding-top:22px}
+  .hero-grid{gap:22px}
+  .hero-copy{text-align:center}
+  .hero-copy .eyebrow{font-size:10px}
+  .hero-copy h1{font-size:38px;margin-top:13px}
+  .hero-copy h2{font-size:19px}
+  .hero-copy p{font-size:12.5px;line-height:1.9;margin-left:auto;margin-right:auto}
+  .hero-stats{grid-template-columns:repeat(2,1fr);max-width:none}
+  .stat{padding:11px 7px}
+  .stat-icon{font-size:18px}
+  .stat strong{font-size:14px}
+  .hero-cta{width:100%;margin-top:16px}
+
+  .player-card{padding:5px;border-radius:8px;width:100%}
+  .screen{border-radius:4px}
+  .player-logo{width:145px;max-height:90px}
+  .rec-tag{top:9px;left:9px;padding:4px 7px;font-size:9px}
+  .ch-tag{top:9px;right:9px}
+  .ch-tag small{font-size:8px}
+  .ch-tag strong{font-size:27px}
+  .player-actions{bottom:7px;left:7px}
+  .player-btn{font-size:10px;padding:6px 8px}
+  .player-status{right:7px;bottom:7px;font-size:10px;padding:5px 7px}
+  .player-line{margin:0 5px 5px}
+
+  .section{padding:22px 0}
+  .section-heading{margin-bottom:13px}
+  .section-heading h2{font-size:23px}
+  .about-grid{gap:10px}
+  .about-card{grid-template-columns:1fr}
+  .about-content{padding:19px}
+  .about-content h3{font-size:22px}
+  .about-content p{font-size:12.5px;line-height:1.9}
+  .about-visual{min-height:145px}
+  .about-visual img{width:52%;max-width:180px}
+  .why-card{padding:19px}
+  .why-card h3{font-size:21px}
+  .why-list li{font-size:12.5px;line-height:1.7}
+
+  .social-card{padding:18px;margin-top:10px}
+  .social-heading{margin-bottom:14px}
+  .social-heading h3{font-size:18px}
+  .social-icons{gap:14px}
+  .social-icon{width:52px;height:52px}
+  .social-icon svg{width:25px;height:25px}
+
+  .footer-grid{grid-template-columns:1fr;gap:22px}
+  .footer-brand{justify-content:center}
+  .footer-col{text-align:center}
+  .footer-links{justify-content:center;gap:12px}
+  .footer-social{justify-content:center}
+  .footer-bottom{font-size:10px;text-align:center;line-height:1.9}
+}
+@media(max-width:430px){
+  .brand img{width:47px;height:47px}
+  .brand-name{font-size:15px}
+  .brand-sub{font-size:7px}
+  .live-button{font-size:10px;padding:8px 9px}
+  .hero-copy h1{font-size:33px}
+  .hero-copy h2{font-size:17px}
+  .hero-copy p{font-size:11.5px}
+  .hero-stats{gap:6px}
+  .stat{padding:9px 5px}
+  .stat small{font-size:9px}
+  .stat strong{font-size:13px}
+  .player-logo{width:120px}
+  .player-btn{font-size:9px;padding:5px 7px}
+  .player-status{font-size:9px}
+  .social-icons{gap:10px}
+  .social-icon{width:48px;height:48px}
+  .social-icon svg{width:23px;height:23px}
+}
+
+
+/* Contact page */
+.contact-page{padding:48px 0 55px}
+.contact-hero{text-align:center;max-width:820px;margin:0 auto 28px}
+.contact-hero .kicker{display:inline-block;color:var(--red);font-size:11px;font-weight:800;letter-spacing:1.5px}
+.contact-hero h1{font-size:clamp(34px,5vw,54px);margin:10px 0 7px;font-weight:800}
+.contact-hero h1 span{color:var(--red)}
+.contact-hero p{color:#b6c0c9;line-height:2;font-size:14px;margin:0 auto;max-width:680px}
+.contact-main{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.contact-card{background:rgba(7,17,27,.9);border:1px solid var(--line);border-radius:9px;padding:24px}
+.contact-card h2{font-size:22px;margin:0 0 16px}
+.contact-list{display:grid;gap:10px}
+.contact-item{
+  display:flex;align-items:center;gap:13px;padding:14px;
+  background:rgba(255,255,255,.018);border:1px solid var(--line);border-radius:7px;
+  transition:.2s
+}
+.contact-item:hover{border-color:rgba(239,35,60,.5);transform:translateY(-1px)}
+.contact-item .icon{
+  width:44px;height:44px;border-radius:8px;display:grid;place-items:center;
+  background:rgba(239,35,60,.1);border:1px solid rgba(239,35,60,.25);
+  font-size:20px;flex:none
+}
+.contact-item small{display:block;color:var(--muted);font-size:10px}
+.contact-item strong{display:block;margin-top:3px;font-size:13px}
+.contact-item .ltr{direction:ltr;text-align:right}
+.contact-item.address strong{direction:rtl}
+.social-card{background:rgba(7,17,27,.9);border:1px solid var(--line);border-radius:9px;padding:24px}
+.social-card h2{text-align:center;font-size:22px;margin:0 0 18px}
+.social-icons{display:flex;justify-content:center;gap:15px;flex-wrap:wrap}
+.social-icon{
+  width:60px;height:60px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+  border:1px solid rgba(255,255,255,.1);box-shadow:0 8px 20px rgba(0,0,0,.2);transition:.2s
+}
+.social-icon:hover{transform:translateY(-4px) scale(1.04);filter:brightness(1.1)}
+.social-icon svg{width:29px;height:29px;fill:#fff}
+.facebook{background:#1877f2}.youtube{background:#f00}.tiktok{background:#050505}
+.telegram{background:#229ed9}.whatsapp{background:#20c863}
+.contact-note{
+  margin-top:16px;text-align:center;border:1px solid rgba(255,191,0,.25);
+  background:linear-gradient(135deg,rgba(255,191,0,.05),rgba(7,17,27,.9));
+  border-radius:9px;padding:22px;color:var(--muted);font-size:12px;line-height:2
+}
+@media(max-width:900px){.contact-main{grid-template-columns:1fr}}
+@media(max-width:700px){
+  .contact-page{padding-top:30px}
+  .contact-hero h1{font-size:36px}.contact-hero p{font-size:12px}
+  .contact-card,.social-card{padding:19px}
+  .social-icon{width:52px;height:52px}.social-icon svg{width:25px;height:25px}
+}
+@media(max-width:430px){
+  .contact-hero h1{font-size:31px}
+  .contact-item{padding:12px}.contact-item strong{font-size:12px}
+}
+
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="container topbar-inner">
+    <div class="live-mini"><span class="live-mini-dot"></span> الآن على الهواء مباشرة</div>
+    <div>HICHRAWI-TV • القناة الرسمية</div>
+  </div>
+</div>
+
+<header class="header">
+  <div class="container header-inner">
+    <a class="brand" href="index.html" aria-label="HICHRAWI-TV">
+      <img src="hichrawi_tv_logo.png" alt="HICHRAWI-TV">
+      <div>
+        <div class="brand-name">HICHRAWI<span>-TV</span></div>
+        <div class="brand-sub">قناة الشباب و العائلة</div>
+      </div>
+    </a>
+
+    <nav class="nav" aria-label="القائمة الرئيسية">
+      <a href="index.html">الرئيسية</a>
+      <a href="index.html#live">البث المباشر</a>
+      <a href="about.html">من نحن</a>
+      <a class="active" href="contact.html">اتصل بنا</a>
+    </nav>
+
+    <div class="header-actions">
+      <a class="live-button" href="index.html#live">● البث المباشر</a>
+      <div class="clock-box vt" id="clock">--:--:--</div>
+    </div>
+  </div>
+</header>
+
+<main class="contact-page">
+  <div class="container">
+    <section class="contact-hero">
+      <div class="kicker">HICHRAWI-TV / CONTACT</div>
+      <h1>تواصل مع HICHRAWI<span>-TV</span></h1>
+      <p>للتواصل مع القناة، يمكنكم استعمال معلومات الاتصال الرسمية أو الدخول مباشرة إلى منصاتنا عبر الأيقونات.</p>
+    </section>
+
+    <section class="contact-main">
+      <div class="contact-card">
+        <h2>📞 معلومات الاتصال</h2>
+        <div class="contact-list">
+          <a class="contact-item" data-link="phone" href="tel:+21624362937">
+            <div class="icon">📞</div>
+            <div><small>الهاتف</small><strong class="ltr" data-contact="phone">+216 24 362 937</strong></div>
+          </a>
+
+          <a class="contact-item" data-link="whatsapp" href="https://wa.me/21624362937" target="_blank" rel="noopener">
+            <div class="icon">💬</div>
+            <div><small>WhatsApp</small><strong class="ltr" data-contact="phone">+216 24 362 937</strong></div>
+          </a>
+
+          <a class="contact-item" href="mailto:hichrawi86@gmail.com">
+            <div class="icon">✉️</div>
+            <div><small>Email</small><strong class="ltr" data-contact="email">hichrawi86@gmail.com</strong></div>
+          </a>
+
+          <div class="contact-item address">
+            <div class="icon">📍</div>
+            <div><small>العنوان</small><strong data-contact="address">تونس العاصمة، تونس</strong></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="social-card">
+        <h2>تابعونا على</h2>
+        <div class="social-icons">
+
+          <a class="social-icon facebook" data-link="facebook" href="https://www.facebook.com/Hichrawi.officiel2" target="_blank" rel="noopener" aria-label="Facebook">
+            <svg viewBox="0 0 24 24"><path d="M13.5 22v-8h2.7l.4-3h-3.1V9.1c0-.9.3-1.6 1.7-1.6h1.8V4.8c-.3 0-1.3-.1-2.5-.1-2.5 0-4.2 1.5-4.2 4.3V11H7.5v3h2.8v8h3.2Z"/></svg>
+          </a>
+
+          <a class="social-icon youtube" data-link="youtube" href="https://www.youtube.com/@hichrawitv.officiel" target="_blank" rel="noopener" aria-label="YouTube">
+            <svg viewBox="0 0 24 24"><path d="M23.5 6.2a3 3 0 0 0-2.1-2.1C19.5 3.5 12 3.5 12 3.5s-7.5 0-9.4.6A3 3 0 0 0 .5 6.2 31.7 31.7 0 0 0 0 12a31.7 31.7 0 0 0 .5 5.8 3 3 0 0 0 2.1 2.1c1.9.6 9.4.6 9.4.6s7.5 0 9.4-.6a3 3 0 0 0 2.1-2.1A31.7 31.7 0 0 0 24 12a31.7 31.7 0 0 0-.5-5.8ZM9.6 15.9V8.1l6.5 3.9-6.5 3.9Z"/></svg>
+          </a>
+
+          <a class="social-icon tiktok" data-link="tiktok" href="https://www.tiktok.com/@bouazizihichrawi1" target="_blank" rel="noopener" aria-label="TikTok">
+            <svg viewBox="0 0 24 24"><path d="M15.2 3h3.1c.2 1.5 1.1 2.8 2.5 3.6.6.4 1.3.6 2 .7v3.1a8.5 8.5 0 0 1-4.5-1.4v6.3a5.7 5.7 0 1 1-5.7-5.7c.4 0 .8 0 1.2.1v3.2a2.6 2.6 0 1 0 1.4 2.4V3Z"/></svg>
+          </a>
+
+          <a class="social-icon telegram" data-link="telegram" href="https://t.me/chawliissam" target="_blank" rel="noopener" aria-label="Telegram">
+            <svg viewBox="0 0 24 24"><path d="m21.8 4.7-3.3 15.6c-.2 1.1-.8 1.4-1.7.9l-4.8-3.5-2.3 2.2c-.3.3-.5.5-1 .5l.3-4.9 8.9-8c.4-.3-.1-.5-.6-.2L6.3 13.9 1.6 12.4c-1-.3-1-1 .2-1.5L20.2 3.7c.8-.3 1.9.2 1.6 1Z"/></svg>
+          </a>
+
+          <a class="social-icon whatsapp" href="https://wa.me/21624362937" target="_blank" rel="noopener" aria-label="WhatsApp">
+            <svg viewBox="0 0 24 24"><path d="M20.5 3.5A11.9 11.9 0 0 0 12.1 0C5.5 0 .2 5.3.2 11.9c0 2.1.5 4.2 1.6 6L.1 24l6.3-1.6a12 12 0 0 0 5.7 1.4h.1c6.5 0 11.8-5.3 11.8-11.9 0-3.2-1.2-6.1-3.5-8.4ZM12.1 21.7h-.1a9.8 9.8 0 0 1-5-1.4l-.4-.2-3.7.9 1-3.6-.2-.4a9.7 9.7 0 0 1-1.5-5.2c0-5.4 4.4-9.8 9.9-9.8 2.6 0 5.1 1 7 2.9a9.8 9.8 0 0 1 2.9 7c0 5.4-4.4 9.8-9.9 9.8Zm5.4-7.3c-.3-.2-1.7-.8-2-.9-.3-.1-.5-.2-.7.2-.2.3-.7.9-.8 1.1-.2.2-.3.2-.6.1-1.5-.8-2.5-1.4-3.5-3.1-.3-.5.3-.5.8-1.7.1-.3 0-.5-.1-.7-.1-.2-.7-1.6-.9-2.2-.2-.6-.5-.5-.7-.5h-.6c-.2 0-.7.1-1 .5-.3.3-1.2 1.2-1.2 2.9s1.2 3.4 1.4 3.6c.2.2 2.3 3.6 5.6 4.9.8.3 1.5.5 2 .6.8.3 1.6.2 2.2.1.7-.1 1.7-.7 1.9-1.4.2-.7.2-1.3.1-1.4-.1-.1-.3-.2-.6-.3Z"/></svg>
+          </a>
+        </div>
+
+        <div class="contact-note">
+          يمكنكم الضغط على أيقونة المنصة لفتح الحساب الرسمي مباشرة.
+        </div>
+      </div>
+    </section>
+  </div>
+</main>
+
+<footer class="footer">
+  <div class="container footer-grid">
+    <div class="footer-brand">
+      <img src="hichrawi_tv_logo.png" alt="HICHRAWI-TV">
+      <div>
+        <strong>HICHRAWI<span>-TV</span></strong>
+        <small>قناة الشباب و العائلة</small>
+      </div>
+    </div>
+
+    <div class="footer-col">
+      <h4>روابط سريعة</h4>
+      <div class="footer-links">
+        <a href="index.html">الرئيسية</a>
+        <a href="index.html#live">البث المباشر</a>
+        <a href="about.html">من نحن</a>
+        <a href="contact.html">اتصل بنا</a>
+      </div>
+    </div>
+
+    <div class="footer-col">
+      <h4>تابعونا على</h4>
+      <div class="footer-social">
+        <a class="social-icon facebook" data-link="facebook" href="https://www.facebook.com/Hichrawi.officiel2" target="_blank" rel="noopener" aria-label="Facebook"><svg viewBox="0 0 24 24"><path d="M13.5 22v-8h2.7l.4-3h-3.1V9.1c0-.9.3-1.6 1.7-1.6h1.8V4.8c-.3 0-1.3-.1-2.5-.1-2.5 0-4.2 1.5-4.2 4.3V11H7.5v3h2.8v8h3.2Z"/></svg></a>
+        <a class="social-icon youtube" data-link="youtube" href="https://www.youtube.com/@hichrawitv.officiel" target="_blank" rel="noopener" aria-label="YouTube"><svg viewBox="0 0 24 24"><path d="M23.5 6.2a3 3 0 0 0-2.1-2.1C19.5 3.5 12 3.5 12 3.5s-7.5 0-9.4.6A3 3 0 0 0 .5 6.2 31.7 31.7 0 0 0 0 12a31.7 31.7 0 0 0 .5 5.8 3 3 0 0 0 2.1 2.1c1.9.6 9.4.6 9.4.6s7.5 0 9.4-.6a3 3 0 0 0 2.1-2.1A31.7 31.7 0 0 0 24 12a31.7 31.7 0 0 0-.5-5.8ZM9.6 15.9V8.1l6.5 3.9-6.5 3.9Z"/></svg></a>
+        <a class="social-icon tiktok" data-link="tiktok" href="https://www.tiktok.com/@bouazizihichrawi1" target="_blank" rel="noopener" aria-label="TikTok"><svg viewBox="0 0 24 24"><path d="M15.2 3h3.1c.2 1.5 1.1 2.8 2.5 3.6.6.4 1.3.6 2 .7v3.1a8.5 8.5 0 0 1-4.5-1.4v6.3a5.7 5.7 0 1 1-5.7-5.7c.4 0 .8 0 1.2.1v3.2a2.6 2.6 0 1 0 1.4 2.4V3Z"/></svg></a>
+        <a class="social-icon telegram" data-link="telegram" href="https://t.me/chawliissam" target="_blank" rel="noopener" aria-label="Telegram"><svg viewBox="0 0 24 24"><path d="m21.8 4.7-3.3 15.6c-.2 1.1-.8 1.4-1.7.9l-4.8-3.5-2.3 2.2c-.3.3-.5.5-1 .5l.3-4.9 8.9-8c.4-.3-.1-.5-.6-.2L6.3 13.9 1.6 12.4c-1-.3-1-1 .2-1.5L20.2 3.7c.8-.3 1.9.2 1.6 1Z"/></svg></a>
+        <a class="social-icon whatsapp" href="https://wa.me/21624362937" target="_blank" rel="noopener" aria-label="WhatsApp"><svg viewBox="0 0 24 24"><path d="M20.5 3.5A11.9 11.9 0 0 0 12.1 0C5.5 0 .2 5.3.2 11.9c0 2.1.5 4.2 1.6 6L.1 24l6.3-1.6a12 12 0 0 0 5.7 1.4h.1c6.5 0 11.8-5.3 11.8-11.9 0-3.2-1.2-6.1-3.5-8.4ZM12.1 21.7h-.1a9.8 9.8 0 0 1-5-1.4l-.4-.2-3.7.9 1-3.6-.2-.4a9.7 9.7 0 0 1-1.5-5.2c0-5.4 4.4-9.8 9.9-9.8 2.6 0 5.1 1 7 2.9a9.8 9.8 0 0 1 2.9 7c0 5.4-4.4 9.8-9.9 9.8Zm5.4-7.3c-.3-.2-1.7-.8-2-.9-.3-.1-.5-.2-.7.2-.2.3-.7.9-.8 1.1-.2.2-.3.2-.6.1-1.5-.8-2.5-1.4-3.5-3.1-.3-.5.3-.5.8-1.7.1-.3 0-.5-.1-.7-.1-.2-.7-1.6-.9-2.2-.2-.6-.5-.5-.7-.5h-.6c-.2 0-.7.1-1 .5-.3.3-1.2 1.2-1.2 2.9s1.2 3.4 1.4 3.6c.2.2 2.3 3.6 5.6 4.9.8.3 1.5.5 2 .6.8.3 1.6.2 2.2.1.7-.1 1.7-.7 1.9-1.4.2-.7.2-1.3.1-1.4-.1-.1-.3-.2-.6-.3Z"/></svg></a>
+      </div>
+    </div>
+  </div>
+
+  <div class="container footer-bottom">
+    <span>© 2026 HICHRAWI-TV — جميع الحقوق محفوظة</span>
+    <span>|</span>
+    <span>By <a href="https://www.facebook.com/Hichrawi.officiel2" target="_blank" rel="noopener">Hichrawi</a></span>
+  </div>
+</footer>
+
+<script>
+function updateClock(){
+  const el=document.getElementById('clock');
+  if(el) el.textContent=new Date().toLocaleTimeString('fr-TN',{hour12:false});
+}
+updateClock();
+setInterval(updateClock,1000);
+</script>
+
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-app.js";
+  import { getFirestore, doc, getDoc } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js";
+
+  // نفس إعداد Firebase المستعمل في مشروع HICHRAWI-TV.
+  // يتم تحميل الإعداد من firebase-config.js الموجود في المشروع.
+  import { firebaseConfig } from "./firebase-config.js";
+
+  const app = initializeApp(firebaseConfig);
+  const db = getFirestore(app);
+
+  const fields = {
+    phone: document.querySelector('[data-contact="phone"]'),
+    whatsapp: document.querySelector('[data-contact="whatsapp"]'),
+    email: document.querySelector('[data-contact="email"]'),
+    address: document.querySelector('[data-contact="address"]'),
+  };
+
+  const links = {
+    whatsapp: document.querySelector('[data-link="whatsapp"]'),
+    facebook: document.querySelector('[data-link="facebook"]'),
+    youtube: document.querySelector('[data-link="youtube"]'),
+    tiktok: document.querySelector('[data-link="tiktok"]'),
+    telegram: document.querySelector('[data-link="telegram"]'),
+  };
+
+  function setText(el, value, fallback) {
+    if (!el) return;
+    if (value !== undefined && value !== null && String(value).trim() !== "") {
+      el.textContent = value;
+    } else {
+      el.textContent = fallback;
+    }
+  }
+
+  function setHref(el, value) {
+    if (!el || !value) return;
+    el.href = value;
+  }
+
+  function normalizeWhatsApp(value) {
+    if (!value) return "";
+    const digits = String(value).replace(/[^0-9]/g, "");
+    return digits ? `https://wa.me/${digits}` : "";
+  }
+
+  async function loadContactInfo() {
+    try {
+      const snap = await getDoc(doc(db, "contact", "info"));
+      if (!snap.exists()) return;
+
+      const c = snap.data() || {};
+
+      setText(fields.phone, c.phone, fields.phone?.textContent || "غير متوفر");
+      setText(fields.whatsapp, c.whatsapp, fields.whatsapp?.textContent || "غير متوفر");
+      setText(fields.email, c.email, fields.email?.textContent || "غير متوفر");
+      setText(fields.address, c.address, fields.address?.textContent || "غير متوفر");
+
+      const wa = normalizeWhatsApp(c.whatsapp);
+      if (wa) setHref(links.whatsapp, wa);
+
+      if (c.facebook) setHref(links.facebook, c.facebook);
+      if (c.youtube) setHref(links.youtube, c.youtube);
+      if (c.tiktok) setHref(links.tiktok, c.tiktok);
+      if (c.telegram) setHref(links.telegram, c.telegram);
+    } catch (err) {
+      console.error("HICHRAWI-TV contact info:", err);
+    }
+  }
+
+  loadContactInfo();
+</script>
+
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-app.js";
+  import { getFirestore, doc, getDoc } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js";
+  import { firebaseConfig } from "./firebase-config.js";
+
+  const app = initializeApp(firebaseConfig);
+  const db = getFirestore(app);
+
+  const phoneEl = document.querySelector('[data-contact="phone"]');
+  const phoneLink = document.querySelector('[data-link="phone"]');
+
+  async function syncPhoneLink() {
+    try {
+      const snap = await getDoc(doc(db, "contact", "info"));
+      if (!snap.exists()) return;
+      const phone = snap.data()?.phone;
+      if (phone && phoneLink) {
+        const digits = String(phone).replace(/[^0-9+]/g, "");
+        phoneLink.href = `tel:${digits}`;
+      }
+    } catch (e) {
+      console.error("HICHRAWI-TV phone link:", e);
+    }
+  }
+  syncPhoneLink();
+</script>
+
+</body>
+</html>
