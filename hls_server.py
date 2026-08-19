@@ -212,20 +212,18 @@ class Handler(BaseHTTPRequestHandler):
             self.serve_file(target, "application/vnd.apple.mpegurl")
             return
 
-        # Relative HLS segment names in the playlist may be resolved by
-        # players as /stream0.ts, /stream1.ts, etc.
-        if path.startswith("/hls/") or path.startswith("/stream/") or (
-            path.startswith("/") and path.endswith(".ts")
-        ):
+        # HLS segments. FFmpeg writes every live .ts segment directly
+        # under /stream/. Accept both /streamN.ts and /stream/streamN.ts
+        # because IPTV players can resolve relative playlist entries
+        # differently.
+        if path.endswith(".ts"):
             name = posixpath.basename(path)
-            if "/" in name or not name.endswith(".ts"):
+
+            if not name.endswith(".ts"):
                 self.send_error(404)
                 return
 
-            # Prefer the live root directory used by FFmpeg.
             target = STREAM_ROOT / name
-            if not target.exists():
-                target = current_dir() / name
 
             if target.exists() and target.is_file():
                 register_viewer(self)
