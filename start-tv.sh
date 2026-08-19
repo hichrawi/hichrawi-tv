@@ -16,7 +16,9 @@ do
     -reconnect_at_eof 1 \
     -reconnect_delay_max 10 \
     -rw_timeout 15000000 \
+    -thread_queue_size 512 \
     -i "$SOURCE" \
+    -thread_queue_size 64 \
     -i "/app/hichrawi-logo-crop.png" \
     -filter_complex "[1:v]scale=180:-1[logo];[0:v][logo]overlay=W-w-30:30,format=yuv420p[outv]" \
     -map "[outv]" \
