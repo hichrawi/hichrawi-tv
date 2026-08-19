@@ -10,8 +10,10 @@ COPY hichrawi-logo-crop.png /app/
 COPY source.json /app/
 
 RUN chmod +x /app/start-tv.sh
-RUN mkdir -p /stream /app/videos
+RUN mkdir -p /stream
+
+ENV PYTHONUNBUFFERED=1
 
 EXPOSE 8080
 
-CMD ["bash", "-c", "python3 -u /app/hls_server.py & exec /app/start-tv.sh"]
+CMD ["bash", "-c", "bash /app/start-tv.sh & exec python3 /app/hls_server.py"]
