@@ -23,7 +23,6 @@ VIEWER_LOCK = threading.Lock()
 VIEWER_ACTIVE_WINDOW = 30
 VIEWER_SESSION_GAP = 15 * 60
 
-
 def _load_viewer_stats():
     try:
         data = json.loads(VIEWER_STATS_FILE.read_text(encoding="utf-8"))
@@ -100,12 +99,10 @@ def current_dir():
     return p
 
 def safe_video_path(name):
-    # Only allow files inside /app/videos.
     p = (VIDEO_ROOT / name).resolve()
     if VIDEO_ROOT.resolve() not in p.parents and p != VIDEO_ROOT.resolve():
         return None
     return p
-
 
 def save_logo_from_url(url):
     url = str(url or "").strip()
@@ -154,17 +151,9 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/videos":
             videos = []
             for p in sorted(VIDEO_ROOT.rglob("*")):
-                if p.is_file() and p.suffix.lower() in {
-                    ".mp4",".mkv",".webm",".mov",".m4v",".avi",".ts",".m2ts"
-                }:
+                if p.is_file() and p.suffix.lower() in {".mp4",".mkv",".webm",".mov",".m4v",".avi",".ts",".m2ts"}:
                     rel = p.relative_to(VIDEO_ROOT).as_posix()
-                    videos.append({
-                        "name": p.name,
-                        "filename": p.name,
-                        "path": rel,
-                        "url": "/videos/" + urllib.parse.quote(rel, safe="/"),
-                        "size": p.stat().st_size
-                    })
+                    videos.append({"name": p.name, "filename": p.name, "path": rel, "url": "/videos/" + urllib.parse.quote(rel, safe="/"), "size": p.stat().st_size})
             self.send_json(200, {"videos": videos})
             return
 
@@ -208,9 +197,14 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json(200, state)
             return
 
+        # The current FFmpeg pipeline writes the live playlist directly
+        # under /stream/. Prefer that exact file so the HTTP server and
+        # FFmpeg always use the same live stream.
         if path in ("/stream.m3u8", "/stream/stream.m3u8"):
-            base = current_dir()
-            target = base / "stream.m3u8"
+            target = STREAM_ROOT / "stream.m3u8"
+            if not target.exists():
+                # Keep compatibility with the source_a/source_b layout.
+                target = current_dir() / "stream.m3u8"
             if not target.exists():
                 self.send_json(503, {"error": "stream not ready"})
                 return
@@ -218,24 +212,20 @@ class Handler(BaseHTTPRequestHandler):
             self.serve_file(target, "application/vnd.apple.mpegurl")
             return
 
-        # HLS segments: accept absolute/root segment URLs such as
-        # /stream0.ts as well as /stream/stream0.ts and /hls/stream0.ts.
-        # This is important because the playlist contains relative names
-        # like "stream0.ts", and IPTV players may resolve them against the
-        # playlist URL in different ways.
+        # Relative HLS segment names in the playlist may be resolved by
+        # players as /stream0.ts, /stream1.ts, etc.
         if path.startswith("/hls/") or path.startswith("/stream/") or (
             path.startswith("/") and path.endswith(".ts")
         ):
-            name = path.rsplit("/", 1)[-1]
-
+            name = posixpath.basename(path)
             if "/" in name or not name.endswith(".ts"):
                 self.send_error(404)
                 return
 
-            # Prefer the active source directory, then fall back to /stream/.
-            target = current_dir() / name
+            # Prefer the live root directory used by FFmpeg.
+            target = STREAM_ROOT / name
             if not target.exists():
-                target = STREAM_ROOT / name
+                target = current_dir() / name
 
             if target.exists() and target.is_file():
                 register_viewer(self)
@@ -279,7 +269,6 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json(400, {"error": "invalid json"})
             return
 
-        # Authentication is verified by the surrounding deployment/auth layer.
         if parsed.path == "/api/logo":
             try:
                 url = request.get("url", "")
@@ -298,12 +287,7 @@ class Handler(BaseHTTPRequestHandler):
             if not isinstance(items, list):
                 self.send_json(400, {"error": "schedule items must be a list"})
                 return
-            clean = {
-                "enabled": bool(request.get("enabled", True)),
-                "timezone_offset_minutes": int(request.get("timezone_offset_minutes", 0)),
-                "items": items,
-                "updated_at": time.time()
-            }
+            clean = {"enabled": bool(request.get("enabled", True)), "timezone_offset_minutes": int(request.get("timezone_offset_minutes", 0)), "items": items, "updated_at": time.time()}
             SCHEDULE_FILE.write_text(json.dumps(clean, ensure_ascii=False), encoding="utf-8")
             print("[HLS] SCHEDULE SAVED: " + json.dumps(clean, ensure_ascii=False), flush=True)
             self.send_json(202, {"ok": True, "status": "saved", "message": "schedule saved"})
