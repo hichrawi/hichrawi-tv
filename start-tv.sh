@@ -30,8 +30,9 @@ do
     -ac 2 \
     -f hls \
     -hls_time 6 \
-    -hls_list_size 6 \
-    -hls_flags delete_segments+append_list+independent_segments \
+    -hls_list_size 20 \
+    -hls_delete_threshold 10 \
+    -hls_flags delete_segments+append_list \
     -hls_segment_type mpegts \
     -hls_allow_cache 0 \
     /stream/stream.m3u8
