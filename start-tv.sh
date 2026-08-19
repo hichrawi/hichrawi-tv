@@ -45,7 +45,6 @@ do
     -hls_segment_type mpegts \
     -hls_allow_cache 0 \
     -hls_playlist_type event \
-    -hls_version 3 \
     /stream/stream.m3u8
 
     echo "[TV] FFmpeg stopped. Restarting in 3 seconds..." | tee -a /tmp/tv.log
