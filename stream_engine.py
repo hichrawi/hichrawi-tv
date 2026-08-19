@@ -158,14 +158,12 @@ def ffmpeg_command(source, folder):
         maps = ["-map","0:v:0","-map","0:a?"]
 
     return common + input_args + filter_args + maps + [
-        "-c:v","libx264","-preset","veryfast","-tune","zerolatency",
-        "-force_key_frames","expr:gte(t,n_forced*6)",
-        "-sc_threshold","0",
+        "-c:v","libx264","-preset","veryfast",
         "-c:a","aac","-b:a","128k",
         "-f","hls",
         "-hls_time","6",
         "-hls_list_size","15",
-        "-hls_flags","delete_segments+append_list+independent_segments",
+        "-hls_flags","delete_segments+append_list",
         "-hls_segment_filename",str(seg),
         str(out)
     ]
