@@ -212,30 +212,36 @@ class Handler(BaseHTTPRequestHandler):
             base = current_dir()
             target = base / "stream.m3u8"
             if not target.exists():
-                target = STREAM_ROOT / "stream.m3u8"
-            if not target.exists():
                 self.send_json(503, {"error": "stream not ready"})
                 return
             register_viewer(self)
             self.serve_file(target, "application/vnd.apple.mpegurl")
             return
 
-        # HLS segments: support both the new /hls/ path and the
-        # legacy /stream/ and root segment paths used by the existing player.
+        # HLS segments: accept absolute/root segment URLs such as
+        # /stream0.ts as well as /stream/stream0.ts and /hls/stream0.ts.
+        # This is important because the playlist contains relative names
+        # like "stream0.ts", and IPTV players may resolve them against the
+        # playlist URL in different ways.
         if path.startswith("/hls/") or path.startswith("/stream/") or (
             path.startswith("/") and path.endswith(".ts")
         ):
             name = path.rsplit("/", 1)[-1]
+
             if "/" in name or not name.endswith(".ts"):
                 self.send_error(404)
                 return
+
+            # Prefer the active source directory, then fall back to /stream/.
             target = current_dir() / name
             if not target.exists():
                 target = STREAM_ROOT / name
-            if target.exists():
+
+            if target.exists() and target.is_file():
                 register_viewer(self)
                 self.serve_file(target, "video/mp2t")
                 return
+
             self.send_error(404)
             return
 
