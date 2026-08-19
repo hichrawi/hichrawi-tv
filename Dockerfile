@@ -7,7 +7,7 @@ RUN apt update && \
 
 WORKDIR /app
 
-COPY Traji1919.html /app/Traji1919.html
+COPY Taraji1919.html /app/Taraji1919.html
 COPY hls_server.py /app/
 COPY stream_engine.py /app/
 COPY source_adapter.py /app/
