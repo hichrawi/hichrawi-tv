@@ -212,6 +212,8 @@ class Handler(BaseHTTPRequestHandler):
             base = current_dir()
             target = base / "stream.m3u8"
             if not target.exists():
+                target = STREAM_ROOT / "stream.m3u8"
+            if not target.exists():
                 self.send_json(503, {"error": "stream not ready"})
                 return
             register_viewer(self)
@@ -228,6 +230,8 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_error(404)
                 return
             target = current_dir() / name
+            if not target.exists():
+                target = STREAM_ROOT / name
             if target.exists():
                 register_viewer(self)
                 self.serve_file(target, "video/mp2t")
@@ -341,4 +345,5 @@ class Handler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):
         print("[HLS]", fmt % args, flush=True)
 
-ThreadingHTTPServer(("0.0.0.0", 8080), Handler).serve_forever()
+PORT = int(os.environ.get("PORT", 8080))
+ThreadingHTTPServer(("0.0.0.0", PORT), Handler).serve_forever()
