@@ -1,11 +1,34 @@
 #!/bin/bash
-set -u
-mkdir -p /stream /app/videos
 
-echo "[HICHRAWI] Starting HLS server..."
-python3 /app/hls_server.py 2>&1 | tee -a /app/hls_server.log &
+while true
+do
+    rm -f /stream/*.ts /stream/*.m3u8 /stream/*.tmp
 
-echo "[HICHRAWI] Starting stream engine..."
-python3 /app/stream_engine.py 2>&1 | tee -a /app/stream_engine.out &
+    SOURCE=$(python3 -c "import json; print(json.load(open('/app/source.json'))['url'])")
 
-wait
+    ffmpeg \
+    -reconnect 1 \
+    -reconnect_streamed 1 \
+    -reconnect_at_eof 1 \
+    -reconnect_delay_max 10 \
+    -rw_timeout 15000000 \
+    -i "$SOURCE" \
+    -i "/app/hichrawi-logo-crop.png" \
+    -filter_complex "[1:v]scale=180:-1[logo];[0:v][logo]overlay=W-w-30:30" \
+    -map 0:v:0 \
+    -map 0:a:0? \
+    -c:v libx264 \
+    -preset veryfast \
+    -pix_fmt yuv420p \
+    -profile:v main \
+    -c:a aac \
+    -b:a 128k \
+    -ar 48000 \
+    -f hls \
+    -hls_time 6 \
+    -hls_list_size 15 \
+    -hls_flags delete_segments+append_list \
+    /stream/stream.m3u8
+
+    sleep 3
+done
