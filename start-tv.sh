@@ -19,15 +19,20 @@ do
     -map 0:a:0? \
     -c:v libx264 \
     -preset veryfast \
-    -pix_fmt yuv420p \
     -profile:v main \
+    -level:v 4.0 \
+    -pix_fmt yuv420p \
+    -crf 23 \
     -c:a aac \
     -b:a 128k \
     -ar 48000 \
+    -ac 2 \
     -f hls \
     -hls_time 6 \
     -hls_list_size 15 \
     -hls_flags delete_segments+append_list \
+    -hls_segment_type mpegts \
+    -hls_allow_cache 0 \
     /stream/stream.m3u8
 
     sleep 3
