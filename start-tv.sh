@@ -6,7 +6,11 @@ do
 
     SOURCE=$(python3 -c "import json; print(json.load(open('/app/source.json'))['url'])")
 
+    echo "[TV] Starting HICHRAWI-TV source..." | tee -a /tmp/tv.log
+
     ffmpeg \
+    -hide_banner \
+    -loglevel warning \
     -reconnect 1 \
     -reconnect_streamed 1 \
     -reconnect_at_eof 1 \
@@ -14,17 +18,22 @@ do
     -rw_timeout 15000000 \
     -i "$SOURCE" \
     -i "/app/hichrawi-logo-crop.png" \
-    -filter_complex "[1:v]scale=180:-1[logo];[0:v][logo]overlay=W-w-30:30" \
-    -map 0:v:0 \
+    -filter_complex "[1:v]scale=180:-1[logo];[0:v][logo]overlay=W-w-30:30,format=yuv420p[outv]" \
+    -map "[outv]" \
     -map 0:a:0? \
     -c:v libx264 \
     -preset veryfast \
     -profile:v main \
-    -level:v 4.0 \
+    -level:v 3.1 \
     -pix_fmt yuv420p \
     -crf 23 \
+    -r 25 \
+    -g 150 \
+    -keyint_min 150 \
+    -sc_threshold 0 \
     -force_key_frames "expr:gte(t,n_forced*6)" \
     -c:a aac \
+    -profile:a aac_low \
     -b:a 128k \
     -ar 48000 \
     -ac 2 \
@@ -35,7 +44,10 @@ do
     -hls_flags delete_segments+append_list \
     -hls_segment_type mpegts \
     -hls_allow_cache 0 \
+    -hls_playlist_type event \
+    -hls_version 3 \
     /stream/stream.m3u8
 
+    echo "[TV] FFmpeg stopped. Restarting in 3 seconds..." | tee -a /tmp/tv.log
     sleep 3
 done
