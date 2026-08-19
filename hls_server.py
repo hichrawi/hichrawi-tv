@@ -346,4 +346,5 @@ class Handler(BaseHTTPRequestHandler):
         print("[HLS]", fmt % args, flush=True)
 
 PORT = int(os.environ.get("PORT", 8080))
+print(f"[HLS] HTTP server listening on 0.0.0.0:{PORT}", flush=True)
 ThreadingHTTPServer(("0.0.0.0", PORT), Handler).serve_forever()
