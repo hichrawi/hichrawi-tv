@@ -447,16 +447,32 @@ class Handler(BaseHTTPRequestHandler):
         # Main HLS playlist.
         #
         # IMPORTANT:
-        # The current FFmpeg command writes /stream/stream.m3u8 directly.
-        # Older A/B versions write the playlist into source_a/source_b.
-        # Always prefer the live root playlist, then fall back to A/B.
+        # The streaming engine uses an A/B playlist:
+        #   /stream/source_a.m3u8
+        #   /stream/source_b.m3u8
+        #
+        # Do NOT prefer /stream/stream.m3u8 here because an old copy or
+        # symlink can point to an outdated playlist and cause requests such
+        # as a_000001.ts -> 404.
+        #
+        # Always select the playlist that belongs to the active slot recorded
+        # in stream_state.json. The playlist itself is read live on every
+        # request, so FFmpeg's current sliding HLS window is preserved.
         if path in (
             "/stream.m3u8",
             "/stream/stream.m3u8",
         ):
-            target = find_hls_file("stream.m3u8")
+            active = get_active_dir()
 
-            if target is None:
+            active_playlist = STREAM_ROOT / f"{active}.m3u8"
+
+            if active_playlist.exists() and active_playlist.is_file():
+                target = active_playlist
+            else:
+                # Compatibility fallback for older layouts.
+                target = find_hls_file("stream.m3u8")
+
+            if target is None or not target.exists():
                 self.send_json(
                     503,
                     {"error": "stream not ready"},
@@ -473,9 +489,13 @@ class Handler(BaseHTTPRequestHandler):
 
         # HLS segments.
         #
-        # Search the root stream first, then active/inactive A/B folders.
-        # This is compatible with both the current direct /stream/*.ts
-        # FFmpeg output and the older double-buffered A/B layout.
+        # The current FFmpeg pipeline writes A/B segments directly under
+        # /stream/, for example:
+        #   /stream/a_000001.ts
+        #   /stream/b_000001.ts
+        #
+        # Prefer the root file because that is where the current pipeline
+        # writes it. Fall back to the A/B directories for compatibility.
         if path.endswith(".ts"):
             name = posixpath.basename(path)
 
@@ -483,7 +503,10 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_error(404)
                 return
 
-            target = find_hls_file(name)
+            target = STREAM_ROOT / name
+
+            if not (target.exists() and target.is_file()):
+                target = find_hls_file(name)
 
             if target is not None:
                 register_viewer(self)
