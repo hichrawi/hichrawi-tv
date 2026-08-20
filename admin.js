@@ -434,109 +434,64 @@ function normalizeSourceUrl(value){
 }
 
 async function waitForSourceSwitch(expectedName, expectedUrl) {
-  // Railway يكتب stream_state.json بعد نجاح التبديل.
-  // لا نعتمد على status فقط؛ نتحقق أيضًا من active_source / active_name
-  // ورسالة النجاح حتى لا تبقى لوحة الإدارة معلقة 3 دقائق رغم نجاح البث.
-  const deadline = Date.now() + (90 * 1000);
-  const wantedName = String(expectedName || "").trim();
+  const deadline = Date.now() + (30 * 1000);
+  const wantedName = String(expectedName || '').trim();
   const wantedUrl = normalizeSourceUrl(expectedUrl);
 
-  while(Date.now() < deadline){
-    try{
+  while (Date.now() < deadline) {
+    try {
       const response = await fetch(
-        STREAM_ENGINE_URL + "/api/status?ts=" + Date.now(),
-        {cache:"no-store"}
+        STREAM_ENGINE_URL + '/api/status?ts=' + Date.now(),
+        { cache: 'no-store' }
       );
 
-      if(response.ok){
+      if (response.ok) {
         const state = await response.json();
-
-        const status = String(state.status || "").trim().toLowerCase();
+        const status = String(state.status || '').trim().toLowerCase();
         const sourceName = String(
-          state.source_name ??
-          state.active_name ??
-          state.activeSourceName ??
-          ""
+          state.active_name ?? state.source_name ?? state.activeSourceName ?? ''
         ).trim();
-
         const sourceUrl = normalizeSourceUrl(
-          state.source_url ??
-          state.active_source ??
-          state.activeSource ??
-          state.url ??
-          ""
+          state.active_source ?? state.source_url ?? state.activeSource ?? state.url ?? ''
         );
+        const message = String(state.message || '').trim().toLowerCase();
 
-        const message = String(state.message || "").trim().toLowerCase();
+        const nameMatches = wantedName && sourceName ? sourceName === wantedName : true;
+        const urlMatches = wantedUrl && sourceUrl ? sourceUrl === wantedUrl : true;
+        const successMessage =
+          message === 'source switched successfully' ||
+          message.includes('source switched successfully');
+        const activeState = status === 'active' || status === 'running' || status === 'switched';
 
-        const nameMatches =
-          !wantedName ||
-          !sourceName ||
-          sourceName === wantedName;
-
-        const urlMatches =
-          !wantedUrl ||
-          !sourceUrl ||
-          sourceUrl === wantedUrl;
-
-        // أقوى دليل: المصدر الذي يعلنه Railway هو نفس المصدر المطلوب.
-        // نقبل أيضًا رسالة "Source switched successfully" حتى لو اختلفت
-        // قيمة status بين إصدارات محرك البث.
-        const switchedMessage =
-          message === "source switched successfully" ||
-          message.includes("source switched successfully");
-
-        const activeState =
-          status === "active" ||
-          status === "switched" ||
-          status === "running";
-
-        if(
-          (activeState && nameMatches && urlMatches) ||
-          (switchedMessage && nameMatches && urlMatches) ||
-          (wantedUrl && sourceUrl === wantedUrl) ||
-          (wantedName && sourceName === wantedName)
-        ){
+        if ((activeState && nameMatches && urlMatches) ||
+            (successMessage && nameMatches && urlMatches)) {
           showSourceSwitchStatus(
-            "success",
-            "🟢 نجحت العملية — تم تبديل البث إلى: " +
-            (sourceName || wantedName || "المصدر الجديد")
+            'success',
+            '🟢 نجحت العملية — تم تبديل البث إلى: ' +
+            (sourceName || wantedName || 'المصدر الجديد')
           );
-
-          // تحديث الواجهة بعد إعلان النجاح، بدون جعل التحديث شرطًا
-          // لاعتبار عملية التبديل ناجحة.
-          loadBroadcastSources().catch(e =>
-            console.warn("refresh after source switch:", e)
+          await loadBroadcastSources().catch(e =>
+            console.warn('refresh after source switch:', e)
           );
-
           return true;
         }
 
-        if(state.switch_failed === true){
-          showSourceSwitchStatus(
-            "error",
-            "🔴 فشلت العملية — المصدر الجديد لم يعمل. البث الحالي مستمر."
-          );
+        if (state.switch_failed === true) {
+          showSourceSwitchStatus('error', '🔴 فشل تبديل المصدر — البث الحالي مستمر.');
           return false;
         }
 
-        if(status === "switching" || status === "testing"){
-          showSourceSwitchStatus(
-            "pending",
-            "🟡 جاري تحضير المصدر الجديد... لا تضغط تشغيل مرة أخرى."
-          );
-        }
+        showSourceSwitchStatus('pending', '🟡 جاري تحضير المصدر الجديد...');
       }
-    }catch(error){
-      console.warn("status check:", error);
+    } catch (error) {
+      console.warn('status check:', error);
     }
-
-    await new Promise(resolve => setTimeout(resolve, 3000));
+    await new Promise(resolve => setTimeout(resolve, 2000));
   }
 
   showSourceSwitchStatus(
-    "error",
-    "🔴 لم يصل تأكيد من محرك البث. افحص Railway Logs قبل إعادة المحاولة."
+    'error',
+    '🔴 لم يصل تأكيد من محرك البث خلال 30 ثانية. افحص Railway Logs.'
   );
   return false;
 }
