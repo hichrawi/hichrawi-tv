@@ -10,7 +10,7 @@ do
 
     ffmpeg \
     -hide_banner \
-    -loglevel warning \
+    -loglevel info \
     -reconnect 1 \
     -reconnect_streamed 1 \
     -reconnect_at_eof 1 \
