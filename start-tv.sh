@@ -35,7 +35,6 @@ do
     -g 150 \
     -keyint_min 150 \
     -sc_threshold 0 \
-    -force_key_frames "expr:gte(t,n_forced*6)" \
     -c:a aac \
     -profile:a aac_low \
     -b:a 128k \
