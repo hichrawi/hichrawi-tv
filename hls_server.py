@@ -286,6 +286,13 @@ def save_logo_from_url(url):
     tmp.write_bytes(data)
     tmp.replace(LOGO_FILE)
 
+    # Keep the logo file used by FFmpeg synchronized with the logo
+    # uploaded from the administration panel.
+    FFMPEG_LOGO_FILE = Path("/app/hichrawi-logo-crop.png")
+    tmp_ffmpeg = FFMPEG_LOGO_FILE.with_suffix(".tmp")
+    tmp_ffmpeg.write_bytes(data)
+    tmp_ffmpeg.replace(FFMPEG_LOGO_FILE)
+
     LOGO_REQUEST_FILE.write_text(
         json.dumps({"updated_at": time.time()}),
         encoding="utf-8",
