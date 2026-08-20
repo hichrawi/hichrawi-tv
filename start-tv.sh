@@ -1,26 +1,20 @@
-```bash
 #!/bin/bash
 
 while true
 do
     rm -f /stream/*.ts /stream/*.m3u8 /stream/*.tmp
 
-    SOURCE=$(python3 -c "import json; print(json.load(open('/app/source.json'))['url'])")
+    SOURCE="/app/videos/videos/1.mp4"
 
-    echo "[TV] Starting HICHRAWI-TV source..." | tee -a /tmp/tv.log
+    echo "[TV] Starting HICHRAWI-TV local video..." | tee -a /tmp/tv.log
 
     ffmpeg \
     -hide_banner \
     -loglevel info \
-    -reconnect 1 \
-    -reconnect_streamed 1 \
-    -reconnect_at_eof 1 \
-    -reconnect_delay_max 10 \
-    -rw_timeout 15000000 \
-    -thread_queue_size 2048 \
     -re \
+    -stream_loop -1 \
+    -thread_queue_size 2048 \
     -i "$SOURCE" \
-    -fflags +genpts \
     -thread_queue_size 64 \
     -loop 1 \
     -framerate 25 \
@@ -34,6 +28,7 @@ do
     -level:v 3.1 \
     -pix_fmt yuv420p \
     -crf 23 \
+    -r 25 \
     -g 150 \
     -keyint_min 150 \
     -sc_threshold 0 \
@@ -53,6 +48,6 @@ do
     /stream/stream.m3u8
 
     echo "[TV] FFmpeg stopped. Restarting in 3 seconds..." | tee -a /tmp/tv.log
+
     sleep 3
 done
-```
