@@ -64,6 +64,48 @@ def get_active_stream_dir():
     return STREAM_DIRS[get_active_dir()]
 
 
+def get_stream_candidates():
+    """
+    Return HLS locations in the safest order.
+
+    The current FFmpeg pipeline writes directly to /stream/.
+    Older A/B switching versions write to /stream/source_a or
+    /stream/source_b. Supporting both layouts prevents the HTTP
+    server from breaking when the streaming engine is changed.
+    """
+    active = get_active_dir()
+    inactive = "source_b" if active == "source_a" else "source_a"
+
+    candidates = [
+        STREAM_ROOT,
+        STREAM_DIRS[active],
+        STREAM_DIRS[inactive],
+    ]
+
+    result = []
+    seen = set()
+    for p in candidates:
+        key = str(p)
+        if key not in seen:
+            seen.add(key)
+            result.append(p)
+    return result
+
+
+def find_hls_file(filename):
+    """Find a playlist/segment without exposing files outside /stream."""
+    name = posixpath.basename(str(filename or ""))
+    if not name or name in (".", ".."):
+        return None
+
+    for directory in get_stream_candidates():
+        target = directory / name
+        if target.exists() and target.is_file():
+            return target
+
+    return None
+
+
 def _load_viewer_stats():
     data = load_json(VIEWER_STATS_FILE)
 
@@ -403,15 +445,18 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         # Main HLS playlist.
+        #
+        # IMPORTANT:
+        # The current FFmpeg command writes /stream/stream.m3u8 directly.
+        # Older A/B versions write the playlist into source_a/source_b.
+        # Always prefer the live root playlist, then fall back to A/B.
         if path in (
             "/stream.m3u8",
             "/stream/stream.m3u8",
         ):
-            active_dir = get_active_stream_dir()
+            target = find_hls_file("stream.m3u8")
 
-            target = active_dir / "stream.m3u8"
-
-            if not target.exists():
+            if target is None:
                 self.send_json(
                     503,
                     {"error": "stream not ready"},
@@ -428,9 +473,9 @@ class Handler(BaseHTTPRequestHandler):
 
         # HLS segments.
         #
-        # Search both directories. This is important because
-        # an IPTV player may still request an old segment for
-        # a short time after the active source changes.
+        # Search the root stream first, then active/inactive A/B folders.
+        # This is compatible with both the current direct /stream/*.ts
+        # FFmpeg output and the older double-buffered A/B layout.
         if path.endswith(".ts"):
             name = posixpath.basename(path)
 
@@ -438,27 +483,16 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_error(404)
                 return
 
-            active_dir = get_active_stream_dir()
-            inactive_dir = (
-                STREAM_DIRS["source_b"]
-                if active_dir == "source_a"
-                else STREAM_DIRS["source_a"]
-            )
+            target = find_hls_file(name)
 
-            candidates = [
-                active_dir / name,
-                inactive_dir / name,
-            ]
+            if target is not None:
+                register_viewer(self)
 
-            for target in candidates:
-                if target.exists() and target.is_file():
-                    register_viewer(self)
-
-                    self.serve_file(
-                        target,
-                        "video/mp2t",
-                    )
-                    return
+                self.serve_file(
+                    target,
+                    "video/mp2t",
+                )
+                return
 
             self.send_error(404)
             return
@@ -738,6 +772,9 @@ class Handler(BaseHTTPRequestHandler):
                 "Cache-Control",
                 "no-cache, no-store, must-revalidate",
             )
+            self.send_header("Pragma", "no-cache")
+            self.send_header("Expires", "0")
+            self.send_header("Accept-Ranges", "bytes")
 
             self.end_headers()
 
