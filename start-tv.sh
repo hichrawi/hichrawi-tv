@@ -20,6 +20,7 @@ do
     -thread_queue_size 2048 \
     -re \
     -i "$SOURCE" \
+    -fflags +genpts \
     -thread_queue_size 64 \
     -loop 1 \
     -framerate 25 \
