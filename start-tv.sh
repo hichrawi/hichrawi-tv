@@ -18,6 +18,7 @@ do
     -reconnect_delay_max 10 \
     -rw_timeout 15000000 \
     -thread_queue_size 2048 \
+    -re \
     -i "$SOURCE" \
     -thread_queue_size 64 \
     -loop 1 \
