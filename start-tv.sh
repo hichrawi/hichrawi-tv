@@ -1,112 +1,160 @@
 #!/bin/bash
+set -u
 
 SOURCE_FILE="/app/source.json"
 REQUEST_FILE="/app/source_request.json"
 STATE_FILE="/app/stream_state.json"
 LOG_FILE="/tmp/tv.log"
-
+LOGO_FILE="/app/hichrawi-logo-crop.png"
 STREAM_ROOT="/stream"
-SOURCE_A="$STREAM_ROOT/source_a"
-SOURCE_B="$STREAM_ROOT/source_b"
+A_DIR="$STREAM_ROOT/source_a"
+B_DIR="$STREAM_ROOT/source_b"
 
-mkdir -p "$SOURCE_A" "$SOURCE_B"
+# Prevent two controller scripts from running at the same time.
+LOCK_DIR="/tmp/hichrawi-tv-controller.lock"
+if ! mkdir "$LOCK_DIR" 2>/dev/null; then
+    echo "[TV] Another start-tv.sh is already running. Exiting."
+    exit 0
+fi
+trap 'rm -rf "$LOCK_DIR"' EXIT
 
-CURRENT_SOURCE=""
-CURRENT_NAME=""
-CURRENT_DIR="source_a"
-FFMPEG_PID=""
+mkdir -p "$A_DIR" "$B_DIR"
+touch "$LOG_FILE"
 
 log() {
-    echo "[TV] $1" | tee -a "$LOG_FILE"
+    echo "[TV] $*" | tee -a "$LOG_FILE"
 }
 
-get_json_value() {
+json_value() {
     python3 - "$1" "$2" <<'PY'
-import json
-import sys
-
+import json, sys
 try:
-    with open(sys.argv[1], "r", encoding="utf-8") as f:
-        data = json.load(f)
-
-    value = data.get(sys.argv[2], "")
-
-    print(value if value is not None else "")
-
+    with open(sys.argv[1], encoding="utf-8") as f:
+        d = json.load(f)
+    v = d.get(sys.argv[2], "")
+    print(v if v is not None else "")
 except Exception:
     print("")
 PY
 }
 
-write_state() {
-    python3 - "$STATE_FILE" "$1" "$2" "$3" "$4" "$5" <<'PY'
-import json
-import sys
-import time
+write_json_atomic() {
+    python3 - "$1" "$2" "$3" "$4" "$5" "$6" <<'PY'
+import json, sys, time
+from pathlib import Path
 
-path = sys.argv[1]
-
+path = Path(sys.argv[1])
 data = {
     "status": sys.argv[2],
     "active_source": sys.argv[3],
     "active_name": sys.argv[4],
     "active_dir": sys.argv[5],
-    "message": sys.argv[6],
     "updated_at": time.time()
 }
+if sys.argv[6]:
+    data["message"] = sys.argv[6]
 
-tmp = path + ".tmp"
-
-with open(tmp, "w", encoding="utf-8") as f:
-    json.dump(data, f, ensure_ascii=False)
-
-import os
-os.replace(tmp, path)
+tmp = path.with_suffix(".tmp")
+tmp.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+tmp.replace(path)
 PY
 }
 
-source_is_file() {
-    case "$1" in
-        /*)
-            [ -f "$1" ]
-            return
-            ;;
-    esac
+save_source() {
+    python3 - "$SOURCE_FILE" "$1" "$2" <<'PY'
+import json, sys
+from pathlib import Path
+
+p = Path(sys.argv[1])
+data = {
+    "type": "iptv",
+    "url": sys.argv[2],
+}
+if sys.argv[3]:
+    data["name"] = sys.argv[3]
+
+tmp = p.with_suffix(".tmp")
+tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+tmp.replace(p)
+PY
+}
+
+clean_dir() {
+    rm -f "$1"/*.ts "$1"/*.m3u8 "$1"/*.tmp 2>/dev/null || true
+}
+
+pid_alive() {
+    [ -n "${1:-}" ] && kill -0 "$1" 2>/dev/null
+}
+
+playlist_ready() {
+    local dir="$1"
+    local playlist="$dir/stream.m3u8"
+
+    [ -s "$playlist" ] || return 1
+
+    grep -q '^#EXTINF:' "$playlist" 2>/dev/null || return 1
+
+    local count
+    count=$(find "$dir" -maxdepth 1 -type f -name '*.ts' 2>/dev/null | wc -l)
+    [ "$count" -ge 3 ]
+}
+
+wait_ready() {
+    local dir="$1"
+    local pid="$2"
+    local timeout="${3:-30}"
+    local i=0
+
+    while [ "$i" -lt "$timeout" ]; do
+        if playlist_ready "$dir"; then
+            return 0
+        fi
+
+        if ! pid_alive "$pid"; then
+            return 1
+        fi
+
+        sleep 1
+        i=$((i + 1))
+    done
 
     return 1
 }
 
 start_ffmpeg() {
-    local SOURCE="$1"
-    local DIR="$2"
-    local PREFIX="$3"
+    local source="$1"
+    local dir="$2"
+    local prefix="$3"
 
-    local OUT="$STREAM_ROOT/$DIR"
+    clean_dir "$dir"
 
-    rm -f "$OUT"/*.ts
-    rm -f "$OUT"/*.m3u8
-    rm -f "$OUT"/*.tmp
+    log "Starting FFmpeg: $source"
+    log "HLS directory: $dir"
 
-    log "Starting candidate/current source:"
-    log "Source: $SOURCE"
-    log "Directory: $DIR"
+    local input_options=()
+
+    if [[ "$source" == http://* || "$source" == https://* ]]; then
+        input_options=(
+            -reconnect 1
+            -reconnect_streamed 1
+            -reconnect_at_eof 1
+            -reconnect_delay_max 10
+            -rw_timeout 15000000
+        )
+    fi
 
     ffmpeg \
         -hide_banner \
         -loglevel warning \
-        -reconnect 1 \
-        -reconnect_streamed 1 \
-        -reconnect_at_eof 1 \
-        -reconnect_delay_max 10 \
-        -rw_timeout 15000000 \
+        "${input_options[@]}" \
         -fflags +genpts+discardcorrupt \
         -thread_queue_size 2048 \
-        -re \
-        -i "$SOURCE" \
+        -i "$source" \
         -loop 1 \
         -framerate 25 \
         -thread_queue_size 64 \
-        -i "/app/hichrawi-logo-crop.png" \
+        -i "$LOGO_FILE" \
         -filter_complex \
         "[1:v]scale=180:-1[logo];[0:v][logo]overlay=W-w-30:30,format=yuv420p[outv]" \
         -map "[outv]" \
@@ -135,339 +183,165 @@ start_ffmpeg() {
         -hls_flags delete_segments+independent_segments+omit_endlist \
         -hls_segment_type mpegts \
         -hls_allow_cache 0 \
-        -hls_segment_filename "$OUT/${PREFIX}%06d.ts" \
-        "$OUT/stream.m3u8" \
+        -hls_segment_filename "$dir/${prefix}_%06d.ts" \
+        "$dir/stream.m3u8" \
         >>"$LOG_FILE" 2>&1 &
 
     echo $!
 }
 
-playlist_ready() {
-    local DIR="$1"
-    local PLAYLIST="$STREAM_ROOT/$DIR/stream.m3u8"
+# ---- Initial source ----
 
-    [ -s "$PLAYLIST" ] || return 1
-
-    grep -q "#EXTINF:" "$PLAYLIST" || return 1
-
-    local SEGMENT
-
-    SEGMENT=$(grep -E '\.ts$' "$PLAYLIST" | tail -1)
-
-    [ -n "$SEGMENT" ] || return 1
-
-    [ -f "$STREAM_ROOT/$DIR/$SEGMENT" ] || return 1
-
-    return 0
-}
-
-wait_candidate() {
-    local DIR="$1"
-    local PID="$2"
-
-    local i=0
-
-    while [ "$i" -lt 30 ]
-    do
-        if ! kill -0 "$PID" 2>/dev/null; then
-            log "Candidate FFmpeg stopped before becoming ready."
-            return 1
-        fi
-
-        if playlist_ready "$DIR"; then
-            log "Candidate source is READY."
-            return 0
-        fi
-
-        sleep 1
-        i=$((i + 1))
-    done
-
-    log "Candidate source did not become ready within 30 seconds."
-
-    return 1
-}
-
-switch_state() {
-    local DIR="$1"
-    local SOURCE="$2"
-    local NAME="$3"
-
-    write_state \
-        "active" \
-        "$SOURCE" \
-        "$NAME" \
-        "$DIR" \
-        "source active" \
-        ""
-}
-
-cleanup_old_later() {
-    local DIR="$1"
-
-    (
-        sleep 60
-
-        rm -f "$STREAM_ROOT/$DIR"/*.ts
-        rm -f "$STREAM_ROOT/$DIR"/*.m3u8
-        rm -f "$STREAM_ROOT/$DIR"/*.tmp
-
-        log "Old stream directory cleaned: $DIR"
-    ) &
-}
-
-# --------------------------------------------------
-# INITIAL SOURCE
-# --------------------------------------------------
-
-CURRENT_SOURCE=$(get_json_value "$SOURCE_FILE" "url")
-CURRENT_NAME=$(get_json_value "$SOURCE_FILE" "name")
+CURRENT_SOURCE=$(json_value "$SOURCE_FILE" "url")
+CURRENT_NAME=$(json_value "$SOURCE_FILE" "name")
 
 if [ -z "$CURRENT_SOURCE" ]; then
     CURRENT_SOURCE="/app/videos/videos/1.mp4"
-fi
-
-if [ -z "$CURRENT_NAME" ]; then
-    CURRENT_NAME="الوطنية 1"
+    CURRENT_NAME="الفيديو المحلي"
 fi
 
 CURRENT_DIR="source_a"
+CURRENT_PATH="$A_DIR"
+CURRENT_PREFIX="stream_a"
 
-log "======================================"
+OTHER_DIR="source_b"
+OTHER_PATH="$B_DIR"
+OTHER_PREFIX="stream_b"
+
 log "HICHRAWI-TV starting..."
 log "Main source: $CURRENT_SOURCE"
-log "Main name: $CURRENT_NAME"
-log "======================================"
 
-write_state \
-    "starting" \
-    "$CURRENT_SOURCE" \
-    "$CURRENT_NAME" \
-    "$CURRENT_DIR" \
-    "starting main source" \
-    ""
+write_json_atomic "$STATE_FILE" "starting" "$CURRENT_SOURCE" "$CURRENT_NAME" "$CURRENT_DIR" ""
 
-FFMPEG_PID=$(start_ffmpeg \
-    "$CURRENT_SOURCE" \
-    "$CURRENT_DIR" \
-    "stream_a_")
+CURRENT_PID=$(start_ffmpeg "$CURRENT_SOURCE" "$CURRENT_PATH" "$CURRENT_PREFIX")
+log "FFmpeg PID: $CURRENT_PID"
 
-log "Main FFmpeg PID: $FFMPEG_PID"
-
-if wait_candidate "$CURRENT_DIR" "$FFMPEG_PID"; then
-
-    switch_state \
-        "$CURRENT_DIR" \
-        "$CURRENT_SOURCE" \
-        "$CURRENT_NAME"
-
+if wait_ready "$CURRENT_PATH" "$CURRENT_PID" 45; then
+    write_json_atomic "$STATE_FILE" "active" "$CURRENT_SOURCE" "$CURRENT_NAME" "$CURRENT_DIR" ""
     log "HICHRAWI-TV is LIVE."
-
 else
+    log "Main source failed to become ready."
 
-    log "Main source failed to start."
+    if pid_alive "$CURRENT_PID"; then
+        kill "$CURRENT_PID" 2>/dev/null || true
+        sleep 1
+        kill -9 "$CURRENT_PID" 2>/dev/null || true
+    fi
 
-    kill -9 "$FFMPEG_PID" 2>/dev/null || true
+    # Local video is the emergency startup source.
+    if [ "$CURRENT_SOURCE" != "/app/videos/videos/1.mp4" ] && [ -f "/app/videos/videos/1.mp4" ]; then
+        CURRENT_SOURCE="/app/videos/videos/1.mp4"
+        CURRENT_NAME="الفيديو المحلي"
+        clean_dir "$CURRENT_PATH"
 
-    exit 1
+        CURRENT_PID=$(start_ffmpeg "$CURRENT_SOURCE" "$CURRENT_PATH" "$CURRENT_PREFIX")
+
+        if wait_ready "$CURRENT_PATH" "$CURRENT_PID" 45; then
+            write_json_atomic "$STATE_FILE" "active" "$CURRENT_SOURCE" "$CURRENT_NAME" "$CURRENT_DIR" "main source failed; local video active"
+            log "Local video is LIVE."
+        else
+            write_json_atomic "$STATE_FILE" "error" "$CURRENT_SOURCE" "$CURRENT_NAME" "$CURRENT_DIR" "no source became ready"
+            log "No source became ready."
+        fi
+    fi
 fi
 
+# ---- Control loop ----
+while true; do
+    # If the active FFmpeg dies unexpectedly, restart ONLY the active source.
+    if ! pid_alive "$CURRENT_PID"; then
+        log "Active FFmpeg stopped. Restarting current source."
 
-# --------------------------------------------------
-# CONTROL LOOP
-# --------------------------------------------------
+        clean_dir "$CURRENT_PATH"
+        CURRENT_PID=$(start_ffmpeg "$CURRENT_SOURCE" "$CURRENT_PATH" "$CURRENT_PREFIX")
 
-while true
-do
-
-    if [ -f "$REQUEST_FILE" ]; then
-
-        REQUEST_SOURCE=$(get_json_value "$REQUEST_FILE" "url")
-        REQUEST_NAME=$(get_json_value "$REQUEST_FILE" "name")
-
-        if [ -z "$REQUEST_SOURCE" ]; then
-            rm -f "$REQUEST_FILE"
-            sleep 1
-            continue
-        fi
-
-        if [ -z "$REQUEST_NAME" ]; then
-            REQUEST_NAME="المصدر الجديد"
-        fi
-
-        if [ "$REQUEST_SOURCE" = "$CURRENT_SOURCE" ]; then
-
-            log "Requested source is already active."
-
-            rm -f "$REQUEST_FILE"
-
-            sleep 1
-            continue
-        fi
-
-        # ------------------------------------------
-        # Choose inactive directory.
-        # ------------------------------------------
-
-        if [ "$CURRENT_DIR" = "source_a" ]; then
-            CANDIDATE_DIR="source_b"
-            CANDIDATE_PREFIX="stream_b_"
+        if wait_ready "$CURRENT_PATH" "$CURRENT_PID" 45; then
+            write_json_atomic "$STATE_FILE" "active" "$CURRENT_SOURCE" "$CURRENT_NAME" "$CURRENT_DIR" ""
+            log "Current source recovered."
         else
-            CANDIDATE_DIR="source_a"
-            CANDIDATE_PREFIX="stream_a_"
-        fi
-
-        log "======================================"
-        log "NEW SOURCE REQUEST"
-        log "Name: $REQUEST_NAME"
-        log "URL: $REQUEST_SOURCE"
-        log "Candidate directory: $CANDIDATE_DIR"
-        log "Current source remains LIVE."
-        log "======================================"
-
-        write_state \
-            "testing" \
-            "$CURRENT_SOURCE" \
-            "$CURRENT_NAME" \
-            "$CURRENT_DIR" \
-            "testing new source" \
-            "$REQUEST_NAME"
-
-        # ------------------------------------------
-        # Start new source WITHOUT touching current.
-        # ------------------------------------------
-
-        CANDIDATE_PID=$(start_ffmpeg \
-            "$REQUEST_SOURCE" \
-            "$CANDIDATE_DIR" \
-            "$CANDIDATE_PREFIX")
-
-        log "Candidate FFmpeg PID: $CANDIDATE_PID"
-
-        # ------------------------------------------
-        # Wait for candidate HLS.
-        # ------------------------------------------
-
-        if wait_candidate \
-            "$CANDIDATE_DIR" \
-            "$CANDIDATE_PID"; then
-
-            log "Candidate source passed HLS readiness check."
-
-            # --------------------------------------
-            # Atomic logical switch.
-            # --------------------------------------
-
-            OLD_DIR="$CURRENT_DIR"
-            OLD_PID="$FFMPEG_PID"
-
-            CURRENT_DIR="$CANDIDATE_DIR"
-            CURRENT_SOURCE="$REQUEST_SOURCE"
-            CURRENT_NAME="$REQUEST_NAME"
-            FFMPEG_PID="$CANDIDATE_PID"
-
-            switch_state \
-                "$CURRENT_DIR" \
-                "$CURRENT_SOURCE" \
-                "$CURRENT_NAME"
-
-            log "======================================"
-            log "SOURCE SWITCH SUCCESS"
-            log "Active: $CURRENT_NAME"
-            log "Directory: $CURRENT_DIR"
-            log "======================================"
-
-            rm -f "$REQUEST_FILE"
-
-            # --------------------------------------
-            # Give IPTV clients time to move to the
-            # new playlist before stopping old FFmpeg.
-            # --------------------------------------
-
-            sleep 8
-
-            if kill -0 "$OLD_PID" 2>/dev/null; then
-                kill "$OLD_PID" 2>/dev/null || true
-                sleep 2
-                kill -9 "$OLD_PID" 2>/dev/null || true
-            fi
-
-            # Keep old segments temporarily.
-            cleanup_old_later "$OLD_DIR"
-
-        else
-
-            log "======================================"
-            log "SOURCE SWITCH FAILED"
-            log "Keeping current source:"
-            log "$CURRENT_NAME"
-            log "======================================"
-
-            write_state \
-                "active" \
-                "$CURRENT_SOURCE" \
-                "$CURRENT_NAME" \
-                "$CURRENT_DIR" \
-                "new source failed; current source kept" \
-                "$REQUEST_NAME"
-
-            kill -9 "$CANDIDATE_PID" 2>/dev/null || true
-
-            rm -f "$CANDIDATE_DIR"/*.ts
-            rm -f "$CANDIDATE_DIR"/*.m3u8
-            rm -f "$CANDIDATE_DIR"/*.tmp
-
-            rm -f "$REQUEST_FILE"
-
+            write_json_atomic "$STATE_FILE" "error" "$CURRENT_SOURCE" "$CURRENT_NAME" "$CURRENT_DIR" "active source failed"
+            log "Current source could not be recovered."
         fi
     fi
 
-    # ----------------------------------------------
-    # Make sure active FFmpeg is alive.
-    # ----------------------------------------------
+    if [ -f "$REQUEST_FILE" ]; then
+        REQUEST_SOURCE=$(json_value "$REQUEST_FILE" "url")
+        REQUEST_NAME=$(json_value "$REQUEST_FILE" "name")
 
-    if ! kill -0 "$FFMPEG_PID" 2>/dev/null; then
-
-        log "ACTIVE FFmpeg stopped."
-
-        if [ -f "$REQUEST_FILE" ]; then
+        # Ignore malformed/empty requests.
+        if [ -z "$REQUEST_SOURCE" ]; then
             rm -f "$REQUEST_FILE"
-        fi
-
-        write_state \
-            "restarting" \
-            "$CURRENT_SOURCE" \
-            "$CURRENT_NAME" \
-            "$CURRENT_DIR" \
-            "active FFmpeg stopped" \
-            ""
-
-        FFMPEG_PID=$(start_ffmpeg \
-            "$CURRENT_SOURCE" \
-            "$CURRENT_DIR" \
-            "stream_${CURRENT_DIR}_")
-
-        if wait_candidate \
-            "$CURRENT_DIR" \
-            "$FFMPEG_PID"; then
-
-            switch_state \
-                "$CURRENT_DIR" \
-                "$CURRENT_SOURCE" \
-                "$CURRENT_NAME"
-
-            log "Active source restarted successfully."
-
+        elif [ "$REQUEST_SOURCE" = "$CURRENT_SOURCE" ]; then
+            log "Requested source is already active: $REQUEST_SOURCE"
+            rm -f "$REQUEST_FILE"
         else
+            log "SOURCE CHANGE REQUEST: $REQUEST_NAME -> $REQUEST_SOURCE"
 
-            log "Active source failed to restart."
+            # Start the new source in the inactive buffer.
+            clean_dir "$OTHER_PATH"
+            write_json_atomic "$STATE_FILE" "testing" "$CURRENT_SOURCE" "$CURRENT_NAME" "$CURRENT_DIR" "testing new source"
 
-            kill -9 "$FFMPEG_PID" 2>/dev/null || true
+            NEW_PID=$(start_ffmpeg "$REQUEST_SOURCE" "$OTHER_PATH" "$OTHER_PREFIX")
 
-            sleep 5
+            if wait_ready "$OTHER_PATH" "$NEW_PID" 45; then
+                log "New source is READY. Switching without stopping current source."
+
+                OLD_PID="$CURRENT_PID"
+                OLD_DIR="$CURRENT_DIR"
+                OLD_PATH="$CURRENT_PATH"
+
+                # Atomic state switch. hls_server.py reads this before
+                # selecting the active A/B playlist.
+                write_json_atomic "$STATE_FILE" "switching" "$REQUEST_SOURCE" "$REQUEST_NAME" "$OTHER_DIR" "new source ready"
+
+                CURRENT_SOURCE="$REQUEST_SOURCE"
+                CURRENT_NAME="$REQUEST_NAME"
+                CURRENT_DIR="$OTHER_DIR"
+                CURRENT_PATH="$OTHER_PATH"
+                CURRENT_PREFIX="$OTHER_PREFIX"
+                CURRENT_PID="$NEW_PID"
+
+                if [ "$CURRENT_DIR" = "source_a" ]; then
+                    OTHER_DIR="source_b"
+                    OTHER_PATH="$B_DIR"
+                    OTHER_PREFIX="stream_b"
+                else
+                    OTHER_DIR="source_a"
+                    OTHER_PATH="$A_DIR"
+                    OTHER_PREFIX="stream_a"
+                fi
+
+                # Make the selected source persistent for the next restart.
+                save_source "$CURRENT_SOURCE" "$CURRENT_NAME"
+
+                write_json_atomic "$STATE_FILE" "active" "$CURRENT_SOURCE" "$CURRENT_NAME" "$CURRENT_DIR" ""
+
+                # Give clients time to request the new playlist/segments.
+                sleep 8
+
+                if pid_alive "$OLD_PID"; then
+                    kill "$OLD_PID" 2>/dev/null || true
+                    sleep 1
+                    kill -9 "$OLD_PID" 2>/dev/null || true
+                fi
+
+                log "SOURCE SWITCH COMPLETE: $CURRENT_NAME"
+                rm -f "$REQUEST_FILE"
+            else
+                log "New source FAILED. Keeping current source LIVE."
+
+                if pid_alive "$NEW_PID"; then
+                    kill "$NEW_PID" 2>/dev/null || true
+                    sleep 1
+                    kill -9 "$NEW_PID" 2>/dev/null || true
+                fi
+
+                clean_dir "$OTHER_PATH"
+                write_json_atomic "$STATE_FILE" "active" "$CURRENT_SOURCE" "$CURRENT_NAME" "$CURRENT_DIR" "new source failed; current source kept"
+                rm -f "$REQUEST_FILE"
+            fi
         fi
     fi
 
     sleep 1
-
 done
