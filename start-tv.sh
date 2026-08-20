@@ -15,6 +15,16 @@ ACTIVE_NAME=""
 
 CURRENT_PID=""
 
+
+resolve_local_source() {
+    local value="$1"
+    if [[ "$value" == /videos/* ]]; then
+        printf '/app%s\n' "$value"
+    else
+        printf '%s\n' "$value"
+    fi
+}
+
 log() {
     echo "[TV] $*" | tee -a "$LOG_FILE"
 }
@@ -271,14 +281,31 @@ switch_source() {
     local old_pid
     local new_pid
 
-    requested_source=$(get_json_value "$REQUEST_FILE" "url")
+    requested_source=$(python3 - "$REQUEST_FILE" <<'PY'
+import json, sys
+try:
+    with open(sys.argv[1], "r", encoding="utf-8") as f:
+        data = json.load(f)
+    source = str(data.get("url") or data.get("source") or "").strip()
+    if not source:
+        items = data.get("items") or []
+        if isinstance(items, list):
+            for item in items:
+                if str(item or "").strip():
+                    source = str(item).strip()
+                    break
+    if source.startswith("/videos/"):
+        source = "/app" + source
+    print(source)
+except Exception:
+    print("")
+PY
+    )
+
+    requested_source=$(resolve_local_source "$requested_source")
 
     if [ -z "$requested_source" ]; then
-        requested_source=$(get_json_value "$REQUEST_FILE" "source")
-    fi
-
-    if [ -z "$requested_source" ]; then
-        log "SOURCE REQUEST: missing URL."
+        log "SOURCE REQUEST: missing URL/source/items."
         rm -f "$REQUEST_FILE"
         return
     fi
