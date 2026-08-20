@@ -1,3 +1,4 @@
+```bash
 #!/bin/bash
 
 while true
@@ -19,6 +20,8 @@ do
     -thread_queue_size 2048 \
     -i "$SOURCE" \
     -thread_queue_size 64 \
+    -loop 1 \
+    -framerate 25 \
     -i "/app/hichrawi-logo-crop.png" \
     -filter_complex "[1:v]scale=180:-1[logo];[0:v][logo]overlay=W-w-30:30,format=yuv420p[outv]" \
     -map "[outv]" \
@@ -51,3 +54,4 @@ do
     echo "[TV] FFmpeg stopped. Restarting in 3 seconds..." | tee -a /tmp/tv.log
     sleep 3
 done
+```
