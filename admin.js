@@ -425,7 +425,7 @@ function showSourceSwitchStatus(type, message){
   el.textContent = message;
 }
 
-async function waitForSourceSwitch(expectedName, expectedUrl) {{
+async function waitForSourceSwitch(expectedName, expectedUrl) {
   const deadline = Date.now() + (3 * 60 * 1000);
 
   while(Date.now() < deadline){
@@ -437,17 +437,55 @@ async function waitForSourceSwitch(expectedName, expectedUrl) {{
       if(response.ok){
         const state = await response.json();
 
-        if(state.status === "switched" &&
-           (!expectedName || state.source_name === expectedName)){
+        const status = String(state.status || "").toLowerCase();
+        const sourceName = String(
+          state.source_name || state.active_name || ""
+        ).trim();
+        const sourceUrl = String(
+          state.source_url || state.active_source || state.url || ""
+        ).trim();
+
+        const nameMatches =
+          !expectedName ||
+          !sourceName ||
+          sourceName === String(expectedName).trim();
+
+        const urlMatches =
+          !expectedUrl ||
+          !sourceUrl ||
+          sourceUrl === String(expectedUrl).trim();
+
+        // Railway يكتب الحالة active بعد نجاح التبديل.
+        // ندعم أيضًا switched/running للتوافق مع النسخ القديمة.
+        if(
+          (status === "active" || status === "switched" || status === "running") &&
+          nameMatches &&
+          urlMatches
+        ){
           showSourceSwitchStatus(
             "success",
             "🟢 نجحت العملية — تم تبديل البث إلى: " +
-            (state.source_name || expectedName || "المصدر الجديد")
+            (sourceName || expectedName || "المصدر الجديد")
           );
+          await loadBroadcastSources();
           return true;
         }
 
-        if(state.status === "running" && state.switch_failed){
+        if(
+          (status === "active" || status === "running") &&
+          sourceName &&
+          expectedName &&
+          sourceName === String(expectedName).trim()
+        ){
+          showSourceSwitchStatus(
+            "success",
+            "🟢 تم تبديل البث بنجاح إلى: " + sourceName
+          );
+          await loadBroadcastSources();
+          return true;
+        }
+
+        if(state.switch_failed === true){
           showSourceSwitchStatus(
             "error",
             "🔴 فشلت العملية — المصدر الجديد لم يعمل. البث الحالي مستمر."
@@ -582,7 +620,10 @@ window.startHichrawiSource = async(id)=>{
 
     // Do not rely on the Firestore "active" badge.
     // Poll the real engine state until it reports switched/failed.
-    waitForSourceSwitch(source.name || "");
+    await waitForSourceSwitch(
+      source.name || "",
+      source.type === "videos" ? "" : (source.url || "")
+    );
   }catch(error){
     console.error("startHichrawiSource:",error);
     alert("❌ تعذر إرسال المصدر إلى محرك البث.\n"+(error.message||""));
