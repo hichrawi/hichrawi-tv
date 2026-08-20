@@ -1,15 +1,30 @@
 #!/bin/bash
 
+REQUEST_FILE="/app/source_request.json"
+CURRENT_FILE="/tmp/current_source_url"
+
 while true
 do
     rm -f /stream/*.ts /stream/*.m3u8 /stream/*.tmp
 
-    SOURCE=$(python3 -c "import json; print(json.load(open('/app/source.json'))['url'])")
+    SOURCE=$(python3 -c "import json; print(json.load(open('/app/source.json')).get('url',''))" 2>/dev/null)
 
     # إذا المصدر فارغ، نستعمل الفيديو المحلي
     if [ -z "$SOURCE" ]; then
         SOURCE="/app/videos/videos/1.mp4"
     fi
+
+    # إذا يوجد طلب مصدر جديد، استعمله
+    if [ -f "$REQUEST_FILE" ]; then
+        REQUEST_SOURCE=$(python3 -c "import json; print(json.load(open('$REQUEST_FILE')).get('url',''))" 2>/dev/null)
+
+        if [ -n "$REQUEST_SOURCE" ]; then
+            SOURCE="$REQUEST_SOURCE"
+            echo "[TV] Requested source detected: $SOURCE" | tee -a /tmp/tv.log
+        fi
+    fi
+
+    echo "$SOURCE" > "$CURRENT_FILE"
 
     echo "[TV] Starting HICHRAWI-TV source: $SOURCE" | tee -a /tmp/tv.log
 
@@ -60,5 +75,6 @@ do
     "/stream/stream.m3u8"
 
     echo "[TV] FFmpeg stopped. Restarting in 3 seconds..." | tee -a /tmp/tv.log
+
     sleep 3
 done
