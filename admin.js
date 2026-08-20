@@ -425,7 +425,7 @@ function showSourceSwitchStatus(type, message){
   el.textContent = message;
 }
 
-async function waitForSourceSwitch(expectedName){
+async function waitForSourceSwitch(expectedName, expectedUrl) {{
   const deadline = Date.now() + (3 * 60 * 1000);
 
   while(Date.now() < deadline){
