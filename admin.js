@@ -425,79 +425,149 @@ function showSourceSwitchStatus(type, message){
   el.textContent = message;
 }
 
-function normalizeSourceUrl(value){
-  return String(value || "")
-    .trim()
-    .replace(/\\/+$/, "")
-    .replace(/^http:\/\//i, "http://")
-    .replace(/^https:\/\//i, "https://");
-}
-
 async function waitForSourceSwitch(expectedName, expectedUrl) {
-  const deadline = Date.now() + (30 * 1000);
-  const wantedName = String(expectedName || '').trim();
-  const wantedUrl = normalizeSourceUrl(expectedUrl);
+  const deadline = Date.now() + (60 * 1000);
+  const wantedName = String(expectedName || "").trim();
+  const wantedUrl = String(expectedUrl || "").trim().replace(/\/+$/, "");
 
   while (Date.now() < deadline) {
     try {
       const response = await fetch(
-        STREAM_ENGINE_URL + '/api/status?ts=' + Date.now(),
-        { cache: 'no-store' }
+        STREAM_ENGINE_URL + "/api/status?ts=" + Date.now(),
+        {
+          cache: "no-store",
+          headers: { "Accept": "application/json" }
+        }
       );
 
       if (response.ok) {
         const state = await response.json();
-        const status = String(state.status || '').trim().toLowerCase();
-        const sourceName = String(
-          state.active_name ?? state.source_name ?? state.activeSourceName ?? ''
+
+        const status = String(state.status || "").trim().toLowerCase();
+        const activeName = String(
+          state.active_name ??
+          state.source_name ??
+          state.activeSourceName ??
+          ""
         ).trim();
-        const sourceUrl = normalizeSourceUrl(
-          state.active_source ?? state.source_url ?? state.activeSource ?? state.url ?? ''
-        );
-        const message = String(state.message || '').trim().toLowerCase();
 
-        const nameMatches = wantedName && sourceName ? sourceName === wantedName : true;
-        const urlMatches = wantedUrl && sourceUrl ? sourceUrl === wantedUrl : true;
-        const successMessage =
-          message === 'source switched successfully' ||
-          message.includes('source switched successfully');
-        const activeState = status === 'active' || status === 'running' || status === 'switched';
+        const activeUrl = String(
+          state.active_source ??
+          state.source_url ??
+          state.activeSource ??
+          state.url ??
+          ""
+        ).trim().replace(/\/+$/, "");
 
-        if ((activeState && nameMatches && urlMatches) ||
-            (successMessage && nameMatches && urlMatches)) {
+        const message = String(state.message || "").trim().toLowerCase();
+
+        // Railway's real successful state:
+        // status=active + active_name/active_source
+        // or the explicit success message.
+        const nameOK = !wantedName || activeName === wantedName;
+        const urlOK = !wantedUrl || activeUrl === wantedUrl;
+
+        const success =
+          (status === "active" && (nameOK || urlOK)) ||
+          message.includes("source switched successfully") ||
+          (wantedUrl && activeUrl === wantedUrl) ||
+          (wantedName && activeName === wantedName);
+
+        if (success) {
           showSourceSwitchStatus(
-            'success',
-            '🟢 نجحت العملية — تم تبديل البث إلى: ' +
-            (sourceName || wantedName || 'المصدر الجديد')
-          );
-          await loadBroadcastSources().catch(e =>
-            console.warn('refresh after source switch:', e)
+            "success",
+            "🟢 نجحت العملية — تم تبديل البث إلى: " +
+            (activeName || wantedName || "المصدر الجديد")
           );
           return true;
         }
 
-        if (state.switch_failed === true) {
-          showSourceSwitchStatus('error', '🔴 فشل تبديل المصدر — البث الحالي مستمر.');
+        if (
+          state.switch_failed === true ||
+          state.switchFailed === true ||
+          status === "failed" ||
+          status === "error"
+        ) {
+          showSourceSwitchStatus(
+            "error",
+            "🔴 فشل تبديل المصدر — البث الحالي مستمر."
+          );
           return false;
         }
 
-        showSourceSwitchStatus('pending', '🟡 جاري تحضير المصدر الجديد...');
+        showSourceSwitchStatus(
+          "pending",
+          "🟡 جاري تحضير المصدر الجديد... لا تضغط تشغيل مرة أخرى."
+        );
       }
     } catch (error) {
-      console.warn('status check:', error);
+      console.warn("status check:", error);
     }
+
     await new Promise(resolve => setTimeout(resolve, 2000));
   }
 
+  // One final status read before declaring failure.
+  try {
+    const finalResponse = await fetch(
+      STREAM_ENGINE_URL + "/api/status?ts=" + Date.now(),
+      { cache: "no-store", headers: { "Accept": "application/json" } }
+    );
+
+    if (finalResponse.ok) {
+      const finalState = await finalResponse.json();
+      const finalName = String(
+        finalState.active_name ??
+        finalState.source_name ??
+        finalState.activeSourceName ??
+        ""
+      ).trim();
+      const finalUrl = String(
+        finalState.active_source ??
+        finalState.source_url ??
+        finalState.activeSource ??
+        finalState.url ??
+        ""
+      ).trim().replace(/\/+$/, "");
+
+      if (
+        (wantedName && finalName === wantedName) ||
+        (wantedUrl && finalUrl === wantedUrl) ||
+        String(finalState.message || "").toLowerCase().includes("source switched successfully")
+      ) {
+        showSourceSwitchStatus(
+          "success",
+          "🟢 نجحت العملية — تم تبديل البث إلى: " +
+          (finalName || wantedName || "المصدر الجديد")
+        );
+        return true;
+      }
+    }
+  } catch (e) {
+    console.warn("final status check:", e);
+  }
+
   showSourceSwitchStatus(
-    'error',
-    '🔴 لم يصل تأكيد من محرك البث خلال 30 ثانية. افحص Railway Logs.'
+    "error",
+    "🔴 لم يصل تأكيد من محرك البث. تحقق من حالة المصدر قبل إعادة المحاولة."
   );
   return false;
 }
 
 window.startHichrawiSource = async(id)=>{
   try{
+    // If no ID is supplied, use the currently marked active source.
+    if(!id){
+      const streamSnap = await getDoc(doc(db,"settings","stream"));
+      const streamData = streamSnap.exists() ? streamSnap.data() : {};
+      id = streamData.activeSourceId || "";
+    }
+
+    if(!id){
+      alert("❌ اختر مصدرًا أولاً.");
+      return;
+    }
+
     const sourceRef = doc(db,"broadcastSources",id);
     const snap = await getDoc(sourceRef);
 
@@ -607,25 +677,15 @@ window.startHichrawiSource = async(id)=>{
       source.type === "videos" ? "" : (source.url || "")
     );
 
-    if(switched){
+    if (switched) {
       await setDoc(doc(db,"settings","stream"),{
         sourceStatus:"active",
         activeSourceId:id,
-        activeSourceName:source.name||"",
-        activeSourceType:source.type||"iptv",
-        activeLibraryId:source.libraryId||"",
+        activeSourceName:source.name || "",
+        activeSourceType:source.type || "iptv",
+        activeLibraryId:source.libraryId || "",
         sourceConfirmedAt:new Date()
       },{merge:true});
-
-      await Promise.all(
-        all.docs.map(item =>
-          updateDoc(doc(db,"broadcastSources",item.id),{
-            enabled:item.id===id,
-            active:item.id===id,
-            updatedAt:new Date()
-          })
-        )
-      );
     }
   }catch(error){
     console.error("startHichrawiSource:",error);
