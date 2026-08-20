@@ -202,15 +202,21 @@ publish_playlist() {
 
     local source_playlist="$STREAM_ROOT/source_${slot}.m3u8"
     local public_playlist="$STREAM_ROOT/stream.m3u8"
-    local temp_playlist="$STREAM_ROOT/stream.m3u8.switch"
+    local temp_link="$STREAM_ROOT/stream.m3u8.switch"
 
     if [ ! -s "$source_playlist" ]; then
         return 1
     fi
 
-    cp "$source_playlist" "$temp_playlist" || return 1
+    # Do NOT copy the playlist. A copied playlist becomes stale while
+    # FFmpeg continues updating source_${slot}.m3u8.
+    # Use an atomic symlink switch so the public playlist always follows
+    # the currently active FFmpeg playlist.
+    rm -f "$temp_link"
 
-    mv -f "$temp_playlist" "$public_playlist" || return 1
+    ln -s "$source_playlist" "$temp_link" || return 1
+
+    mv -Tf "$temp_link" "$public_playlist" || return 1
 
     return 0
 }
@@ -413,6 +419,10 @@ log "========================================"
 cleanup_slot "a"
 cleanup_slot "b"
 
+# Remove only the public playlist link from a previous container.
+# FFmpeg owns the source_a/source_b playlists.
+rm -f "$STREAM_ROOT/stream.m3u8" "$STREAM_ROOT/stream.m3u8.switch"
+
 load_main_source
 
 log "Main source: $ACTIVE_SOURCE"
@@ -513,4 +523,3 @@ do
     fi
 
     sleep 1
-done
