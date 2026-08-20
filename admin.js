@@ -425,63 +425,90 @@ function showSourceSwitchStatus(type, message){
   el.textContent = message;
 }
 
+function normalizeSourceUrl(value){
+  return String(value || "")
+    .trim()
+    .replace(/\\/+$/, "")
+    .replace(/^http:\/\//i, "http://")
+    .replace(/^https:\/\//i, "https://");
+}
+
 async function waitForSourceSwitch(expectedName, expectedUrl) {
-  const deadline = Date.now() + (3 * 60 * 1000);
+  // Railway يكتب stream_state.json بعد نجاح التبديل.
+  // لا نعتمد على status فقط؛ نتحقق أيضًا من active_source / active_name
+  // ورسالة النجاح حتى لا تبقى لوحة الإدارة معلقة 3 دقائق رغم نجاح البث.
+  const deadline = Date.now() + (90 * 1000);
+  const wantedName = String(expectedName || "").trim();
+  const wantedUrl = normalizeSourceUrl(expectedUrl);
 
   while(Date.now() < deadline){
     try{
-      const response = await fetch(STREAM_ENGINE_URL + "/api/status?ts=" + Date.now(), {
-        cache:"no-store"
-      });
+      const response = await fetch(
+        STREAM_ENGINE_URL + "/api/status?ts=" + Date.now(),
+        {cache:"no-store"}
+      );
 
       if(response.ok){
         const state = await response.json();
 
-        const status = String(state.status || "").toLowerCase();
+        const status = String(state.status || "").trim().toLowerCase();
         const sourceName = String(
-          state.source_name || state.active_name || ""
+          state.source_name ??
+          state.active_name ??
+          state.activeSourceName ??
+          ""
         ).trim();
-        const sourceUrl = String(
-          state.source_url || state.active_source || state.url || ""
-        ).trim();
+
+        const sourceUrl = normalizeSourceUrl(
+          state.source_url ??
+          state.active_source ??
+          state.activeSource ??
+          state.url ??
+          ""
+        );
+
+        const message = String(state.message || "").trim().toLowerCase();
 
         const nameMatches =
-          !expectedName ||
+          !wantedName ||
           !sourceName ||
-          sourceName === String(expectedName).trim();
+          sourceName === wantedName;
 
         const urlMatches =
-          !expectedUrl ||
+          !wantedUrl ||
           !sourceUrl ||
-          sourceUrl === String(expectedUrl).trim();
+          sourceUrl === wantedUrl;
 
-        // Railway يكتب الحالة active بعد نجاح التبديل.
-        // ندعم أيضًا switched/running للتوافق مع النسخ القديمة.
+        // أقوى دليل: المصدر الذي يعلنه Railway هو نفس المصدر المطلوب.
+        // نقبل أيضًا رسالة "Source switched successfully" حتى لو اختلفت
+        // قيمة status بين إصدارات محرك البث.
+        const switchedMessage =
+          message === "source switched successfully" ||
+          message.includes("source switched successfully");
+
+        const activeState =
+          status === "active" ||
+          status === "switched" ||
+          status === "running";
+
         if(
-          (status === "active" || status === "switched" || status === "running") &&
-          nameMatches &&
-          urlMatches
+          (activeState && nameMatches && urlMatches) ||
+          (switchedMessage && nameMatches && urlMatches) ||
+          (wantedUrl && sourceUrl === wantedUrl) ||
+          (wantedName && sourceName === wantedName)
         ){
           showSourceSwitchStatus(
             "success",
             "🟢 نجحت العملية — تم تبديل البث إلى: " +
-            (sourceName || expectedName || "المصدر الجديد")
+            (sourceName || wantedName || "المصدر الجديد")
           );
-          await loadBroadcastSources();
-          return true;
-        }
 
-        if(
-          (status === "active" || status === "running") &&
-          sourceName &&
-          expectedName &&
-          sourceName === String(expectedName).trim()
-        ){
-          showSourceSwitchStatus(
-            "success",
-            "🟢 تم تبديل البث بنجاح إلى: " + sourceName
+          // تحديث الواجهة بعد إعلان النجاح، بدون جعل التحديث شرطًا
+          // لاعتبار عملية التبديل ناجحة.
+          loadBroadcastSources().catch(e =>
+            console.warn("refresh after source switch:", e)
           );
-          await loadBroadcastSources();
+
           return true;
         }
 
@@ -493,7 +520,7 @@ async function waitForSourceSwitch(expectedName, expectedUrl) {
           return false;
         }
 
-        if(state.status === "switching"){
+        if(status === "switching" || status === "testing"){
           showSourceSwitchStatus(
             "pending",
             "🟡 جاري تحضير المصدر الجديد... لا تضغط تشغيل مرة أخرى."
@@ -504,12 +531,12 @@ async function waitForSourceSwitch(expectedName, expectedUrl) {
       console.warn("status check:", error);
     }
 
-    await new Promise(resolve => setTimeout(resolve, 5000));
+    await new Promise(resolve => setTimeout(resolve, 3000));
   }
 
   showSourceSwitchStatus(
     "error",
-    "🔴 لم يصل تأكيد خلال 3 دقائق. لا نعيد التجربة الآن؛ افحص Railway Logs."
+    "🔴 لم يصل تأكيد من محرك البث. افحص Railway Logs قبل إعادة المحاولة."
   );
   return false;
 }
@@ -620,10 +647,31 @@ window.startHichrawiSource = async(id)=>{
 
     // Do not rely on the Firestore "active" badge.
     // Poll the real engine state until it reports switched/failed.
-    await waitForSourceSwitch(
+    const switched = await waitForSourceSwitch(
       source.name || "",
       source.type === "videos" ? "" : (source.url || "")
     );
+
+    if(switched){
+      await setDoc(doc(db,"settings","stream"),{
+        sourceStatus:"active",
+        activeSourceId:id,
+        activeSourceName:source.name||"",
+        activeSourceType:source.type||"iptv",
+        activeLibraryId:source.libraryId||"",
+        sourceConfirmedAt:new Date()
+      },{merge:true});
+
+      await Promise.all(
+        all.docs.map(item =>
+          updateDoc(doc(db,"broadcastSources",item.id),{
+            enabled:item.id===id,
+            active:item.id===id,
+            updatedAt:new Date()
+          })
+        )
+      );
+    }
   }catch(error){
     console.error("startHichrawiSource:",error);
     alert("❌ تعذر إرسال المصدر إلى محرك البث.\n"+(error.message||""));
