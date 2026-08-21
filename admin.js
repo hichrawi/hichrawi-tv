@@ -1801,40 +1801,91 @@ window.saveAnnouncement = async function(enabled){
     enabled:Boolean(enabled),
     updatedAt:new Date()
   };
-  if(enabled && !data.text){ alert("❌ اكتب نص الإعلان أولاً"); return; }
+
+  if(enabled && !data.text){
+    alert("❌ اكتب نص الإعلان أولاً");
+    return;
+  }
+
+  const msg=document.getElementById("announcementMessage");
+  const setMsg=(t)=>{
+    if(msg) msg.textContent=t;
+  };
 
   try{
-    const user = auth.currentUser;
-    if(!user){ throw new Error("انتهت جلسة الإدارة. سجل الدخول من جديد."); }
-    const idToken = await user.getIdToken();
+    setMsg(enabled
+      ? "🟡 جاري إرسال الإعلان إلى البث..."
+      : "🟡 جاري إرسال أمر إيقاف الإعلان إلى البث...");
 
-    // Apply the announcement to the real Railway stream engine.
-    const response = await fetch(STREAM_ENGINE_URL + "/api/announcement", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": "Bearer " + idToken,
-        "X-Firebase-Api-Key": firebaseConfig.apiKey
-      },
-      body: JSON.stringify(data)
-    });
+    const base=(window.HICHRAWI_API_BASE ||
+                window.STREAM_API_BASE ||
+                window.location.origin).replace(/\/+$/,"");
 
-    if(!response.ok){
-      const text = await response.text();
-      throw new Error(text || ("HTTP " + response.status));
+    let token="";
+    try{
+      if(typeof auth!=="undefined" && auth?.currentUser){
+        token=await auth.currentUser.getIdToken();
+      }
+    }catch(e){
+      console.warn("[ANNOUNCEMENT] Token:",e);
     }
 
-    // Keep Firestore settings synchronized with the server.
+    const payload={
+      enabled:data.enabled,
+      text:data.text,
+      type:data.type,
+      speed:data.speed,
+      bgColor:data.bgColor,
+      textColor:data.textColor,
+      fontSize:data.fontSize,
+      bg:data.bgColor,
+      fg:data.textColor,
+      font_size:parseInt(String(data.fontSize).replace("px",""),10)||20
+    };
+
+    const headers={"Content-Type":"application/json"};
+    if(token) headers["Authorization"]="Bearer "+token;
+
+    setMsg(enabled
+      ? "🟡 تم إرسال الطلب، جاري تطبيق الإعلان على البث..."
+      : "🟡 تم إرسال أمر الإيقاف، جاري تطبيقه على البث...");
+
+    const response=await fetch(base+"/api/announcement",{
+      method:"POST",
+      headers,
+      body:JSON.stringify(payload)
+    });
+
+    let result=null;
+    try{ result=await response.json(); }catch(_){}
+
+    if(!response.ok){
+      throw new Error(result?.error || result?.message || ("HTTP "+response.status));
+    }
+
     await setDoc(doc(db,"settings","announcement"),data,{merge:true});
 
-    const msg=document.getElementById("announcementMessage");
-    if(msg) msg.textContent=enabled
-      ? "🟢 تم تشغيل الإعلان وتطبيقه على البث."
-      : "⏹️ تم إيقاف الإعلان على البث وحفظ الإعدادات.";
+    setMsg(enabled
+      ? "🟢 نجحت العملية — تم إرسال الإعلان وتطبيقه على البث."
+      : "🟢 نجحت العملية — تم إيقاف الإعلان من البث.");
+
     previewAnnouncement();
+    console.log("[ANNOUNCEMENT] API success:",result);
+
+    setTimeout(()=>{
+      if(msg && msg.textContent.includes("نجحت العملية")){
+        msg.textContent=enabled
+          ? "🟢 الإعلان مفعّل على البث."
+          : "⏹️ الإعلان متوقف.";
+      }
+    },5000);
+
   }catch(e){
-    console.error("saveAnnouncement:",e);
-    alert("❌ تعذر تطبيق الإعلان على البث: " + (e.message||e));
+    console.error("[ANNOUNCEMENT] Failed:",e);
+    setMsg(enabled
+      ? "🔴 فشلت العملية — الإعلان لم يُطبّق على البث."
+      : "🔴 فشلت العملية — لم يتم إيقاف الإعلان من البث.");
+    alert("❌ فشلت العملية\n\n"+(e?.message||e));
   }
 };
 
