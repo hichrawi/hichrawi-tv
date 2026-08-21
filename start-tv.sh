@@ -135,7 +135,7 @@ load_announcement() {
 
     ANNOUNCEMENT_SIGNATURE="$(sha256sum "$ANNOUNCEMENT_FILE" 2>/dev/null | awk '{print $1}')"
 
-    ANNOUNCEMENT_DATA="$(python3 -c 'import json,sys; from pathlib import Path; p=Path(sys.argv[1]); d=json.loads(p.read_text(encoding="utf-8")) if p.exists() else {}; enabled=bool(d.get("enabled",False)); text=str(d.get("text","") or "").strip(); speed=float(d.get("speed",18) or 18); size=int(float(str(d.get("fontSize",20) or 20).strip().lower().replace("px",""))); bg=str(d.get("bgColor",d.get("backgroundColor","#e00000")) or "#e00000").lstrip("#"); fg=str(d.get("textColor",d.get("color","#ffffff")) or "#ffffff").lstrip("#"); speed=max(1,min(speed,100)); size=max(18,min(size,80)); bg=bg if len(bg)==6 else "e00000"; fg=fg if len(fg)==6 else "ffffff"; print(("true" if enabled and text else "false")+"\t"+text.replace("\t"," ")+"\t"+str(speed)+"\t"+str(size)+"\t0x"+bg+"\t0x"+fg)' "$ANNOUNCEMENT_FILE")"
+    ANNOUNCEMENT_DATA="$(python3 -c 'import json,sys; from pathlib import Path; p=Path(sys.argv[1]); d=json.loads(p.read_text(encoding="utf-8")) if p.exists() else {}; enabled=bool(d.get("enabled",False)); text=str(d.get("text","") or "").strip(); speed=float(d.get("speed",3) or 3); size=int(float(str(d.get("fontSize",20) or 20).strip().lower().replace("px",""))); bg=str(d.get("bgColor",d.get("backgroundColor","#e00000")) or "#e00000").lstrip("#"); fg=str(d.get("textColor",d.get("color","#ffffff")) or "#ffffff").lstrip("#"); speed=max(1,min(speed,10)); size=max(18,min(size,80)); bg=bg if len(bg)==6 else "e00000"; fg=fg if len(fg)==6 else "ffffff"; print(("true" if enabled and text else "false")+"\t"+text.replace("\t"," ")+"\t"+str(speed)+"\t"+str(size)+"\t0x"+bg+"\t0x"+fg)' "$ANNOUNCEMENT_FILE")"
 
     IFS=$'\t' read -r ANNOUNCEMENT_ENABLED ANNOUNCEMENT_TEXT ANNOUNCEMENT_SPEED ANNOUNCEMENT_SIZE ANNOUNCEMENT_BG ANNOUNCEMENT_FG <<< "$ANNOUNCEMENT_DATA"
 
@@ -168,11 +168,12 @@ start_ffmpeg() {
 
     if [ "$ANNOUNCEMENT_ENABLED" = "true" ]; then
         filter="[1:v]scale=180:-1[logo];[0:v][logo]overlay=W-w-30:30[base];"
-        filter+="[base]drawbox=x=0:y=ih-90:w=iw:h=90:color=${ANNOUNCEMENT_BG}@0.92:t=fill[bar];"
+        filter+="[base]drawbox=x=0:y=ih-55:w=iw:h=55:color=${ANNOUNCEMENT_BG}@0.92:t=fill[bar];"
         filter+="[bar]drawtext=fontfile=${font}:textfile=${ANNOUNCEMENT_TEXT_FILE}:reload=1:"
         filter+="fontsize=${ANNOUNCEMENT_SIZE}:fontcolor=${ANNOUNCEMENT_FG}:"
-        filter+="x=w-mod(t*${ANNOUNCEMENT_SPEED}*(tw+w)\,tw+w):y=h-th-28,"
-filter+="format=yuv420p[outv]"
+        filter+="borderw=1:bordercolor=0x000000@0.65:"
+        filter+="x=w-mod(t*${ANNOUNCEMENT_SPEED}*(tw+w)\,tw+w):y=h-th-19,"
+        filter+="format=yuv420p[outv]"
         log "ANNOUNCEMENT FILTER ACTIVE."
     else
         filter="[1:v]scale=180:-1[logo];[0:v][logo]overlay=W-w-30:30,format=yuv420p[outv]"
@@ -345,7 +346,7 @@ switch_source() {
     local new_pid
 
    requested_source=$(
-    python3 - "$REQUEST_FILE" 2> >(tee -a "$LOG_FILE" >&2) <<'PY'
+    python3 - "$REQUEST_FILE" <<'PY'
 import json, sys
 
 try:
