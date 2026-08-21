@@ -163,6 +163,17 @@ def read_announcement():
     }
 
 
+def announcement_font():
+    candidates = [
+        "/usr/share/fonts/truetype/noto/NotoSansArabic-Regular.ttf",
+        "/usr/share/fonts/truetype/noto/NotoNaskhArabic-Regular.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+    ]
+    for candidate in candidates:
+        if Path(candidate).exists():
+            return candidate
+    return "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
+
 def announcement_filter(video_label, announcement):
     if not announcement.get("enabled"):
         return video_label
@@ -176,7 +187,7 @@ def announcement_filter(video_label, announcement):
 
     return (
         f"drawbox=x=0:y=h-90:w=w:h=90:color={bg}@0.92:t=fill,"
-        f"drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf:"
+        f"drawtext=fontfile={announcement_font()}:"
         f"textfile={ANNOUNCEMENT_TEXT_FILE}:reload=0:"
         f"fontsize={fontsize}:fontcolor={fg}:"
         f"x=w-mod(t*{speed}*(tw+w),tw+w):y=h-th-28:"
@@ -216,13 +227,29 @@ def ffmpeg_command(source, folder):
     logo_path = str(LOGO_FILE if LOGO_FILE.exists() else Path("/app/hichrawi-logo-crop.png"))
     announcement = read_announcement()
 
+    if announcement.get("enabled"):
+        try:
+            announcement_text = ANNOUNCEMENT_TEXT_FILE.read_text(
+                encoding="utf-8", errors="replace"
+            )
+        except Exception:
+            announcement_text = ""
+        log("ANNOUNCEMENT FILTER ENABLED: " + json.dumps({
+            "text": announcement_text,
+            "speed": announcement["speed"],
+            "font_size": announcement["font_size"],
+            "bg": announcement["bg"],
+            "fg": announcement["fg"],
+            "font": announcement_font()
+        }, ensure_ascii=False))
+
     if audio_only:
         # Replace absent video with a generated black canvas.
         video_chain = "[0:v][logo]overlay=W-w-30:30"
         if announcement.get("enabled"):
             video_chain += ",drawbox=x=0:y=h-90:w=w:h=90:color=" + announcement["bg"] + "@0.92:t=fill"
             video_chain += ",drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
-            video_chain += f":textfile={ANNOUNCEMENT_TEXT_FILE}:reload=0:fontsize={announcement['font_size']}:fontcolor={announcement['fg']}"
+            video_chain += f":textfile={ANNOUNCEMENT_TEXT_FILE}:reload=0:fontsize={announcement['font_size']}:fontcolor={announcement['fg']}:text_shaping=1:text_shaping=1"
             video_chain += f":x=w-mod(t*{announcement['speed']}*(tw+w),tw+w):y=h-th-28:box=0:fix_bounds=1[v]"
         else:
             video_chain += "[v]"
@@ -240,7 +267,7 @@ def ffmpeg_command(source, folder):
             video_chain = "[0:v][logo]overlay=W-w-30:30"
             video_chain += ",drawbox=x=0:y=h-90:w=w:h=90:color=" + announcement["bg"] + "@0.92:t=fill"
             video_chain += ",drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
-            video_chain += f":textfile={ANNOUNCEMENT_TEXT_FILE}:reload=0:fontsize={announcement['font_size']}:fontcolor={announcement['fg']}"
+            video_chain += f":textfile={ANNOUNCEMENT_TEXT_FILE}:reload=0:fontsize={announcement['font_size']}:fontcolor={announcement['fg']}:text_shaping=1:text_shaping=1"
             video_chain += f":x=w-mod(t*{announcement['speed']}*(tw+w),tw+w):y=h-th-28:box=0:fix_bounds=1[v]"
             filter_args = [
                 "-i", logo_path,
@@ -287,8 +314,26 @@ def start_candidate(source, folder):
     proc = subprocess.Popen(
         cmd,
         stdout=subprocess.DEVNULL,
-        stderr=subprocess.STDOUT
+        stderr=subprocess.PIPE,
+        text=True,
+        bufsize=1
     )
+
+    def _read_ffmpeg_log(p):
+        try:
+            for line in p.stderr:
+                line = line.rstrip()
+                if line:
+                    log("FFMPEG: " + line)
+        except Exception as e:
+            log("FFMPEG LOG READER FAILED: " + str(e))
+
+    import threading
+    threading.Thread(
+        target=_read_ffmpeg_log,
+        args=(proc,),
+        daemon=True
+    ).start()
 
     if wait_ready(folder, 90):
         return proc
