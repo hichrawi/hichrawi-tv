@@ -1,6 +1,6 @@
 FROM ubuntu:24.04
 
-RUN apt update && apt install -y ffmpeg python3 yt-dlp && rm -rf /var/lib/apt/lists/*
+RUN apt update && apt install -y ffmpeg python3 python3-pip && rm -rf /var/lib/apt/lists/* && pip3 install --break-system-packages -U yt-dlp
 
 WORKDIR /app
 
