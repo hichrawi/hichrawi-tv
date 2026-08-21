@@ -1,11 +1,12 @@
 FROM ubuntu:24.04
 
-RUN apt update && apt install -y ffmpeg python3 && rm -rf /var/lib/apt/lists/*
+RUN apt update && apt install -y ffmpeg python3 yt-dlp && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
 COPY hls_server.py /app/
 COPY start-tv.sh /app/
+COPY youtube_runner.py /app/
 COPY hichrawi-logo-crop.png /app/
 COPY source.json /app/
 
