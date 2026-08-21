@@ -1808,27 +1808,20 @@ window.saveAnnouncement = async function(enabled){
   }
 
   const msg=document.getElementById("announcementMessage");
-  const setMsg=(t)=>{
-    if(msg) msg.textContent=t;
+  const setStatus=(text)=>{
+    if(msg) msg.textContent=text;
   };
 
   try{
-    setMsg(enabled
+    const user=auth.currentUser;
+    if(!user) throw new Error("انتهت جلسة الإدارة. سجل الدخول من جديد.");
+
+    setStatus(enabled
       ? "🟡 جاري إرسال الإعلان إلى البث..."
       : "🟡 جاري إرسال أمر إيقاف الإعلان إلى البث...");
 
-    const base=(window.HICHRAWI_API_BASE ||
-                window.STREAM_API_BASE ||
-                window.location.origin).replace(/\/+$/,"");
-
-    let token="";
-    try{
-      if(typeof auth!=="undefined" && auth?.currentUser){
-        token=await auth.currentUser.getIdToken();
-      }
-    }catch(e){
-      console.warn("[ANNOUNCEMENT] Token:",e);
-    }
+    const idToken=await user.getIdToken();
+    const apiUrl=STREAM_ENGINE_URL + "/api/announcement";
 
     const payload={
       enabled:data.enabled,
@@ -1843,37 +1836,46 @@ window.saveAnnouncement = async function(enabled){
       font_size:parseInt(String(data.fontSize).replace("px",""),10)||20
     };
 
-    const headers={"Content-Type":"application/json"};
-    if(token) headers["Authorization"]="Bearer "+token;
-
-    setMsg(enabled
+    setStatus(enabled
       ? "🟡 تم إرسال الطلب، جاري تطبيق الإعلان على البث..."
       : "🟡 تم إرسال أمر الإيقاف، جاري تطبيقه على البث...");
 
-    const response=await fetch(base+"/api/announcement",{
+    const response=await fetch(apiUrl,{
       method:"POST",
-      headers,
-      body:JSON.stringify(payload)
+      mode:"cors",
+      headers:{
+        "Content-Type":"application/json",
+        "Authorization":"Bearer "+idToken,
+        "X-Firebase-Api-Key":firebaseConfig.apiKey,
+        "Accept":"application/json"
+      },
+      body:JSON.stringify(payload),
+      cache:"no-store"
     });
 
+    const responseText=await response.text();
     let result=null;
-    try{ result=await response.json(); }catch(_){}
+    try{ result=responseText ? JSON.parse(responseText) : null; }catch(_){}
 
     if(!response.ok){
-      throw new Error(result?.error || result?.message || ("HTTP "+response.status));
+      throw new Error(
+        (result && (result.error || result.message)) ||
+        responseText ||
+        ("HTTP "+response.status)
+      );
     }
 
     await setDoc(doc(db,"settings","announcement"),data,{merge:true});
 
-    setMsg(enabled
+    setStatus(enabled
       ? "🟢 نجحت العملية — تم إرسال الإعلان وتطبيقه على البث."
       : "🟢 نجحت العملية — تم إيقاف الإعلان من البث.");
 
     previewAnnouncement();
-    console.log("[ANNOUNCEMENT] API success:",result);
+    console.log("[ANNOUNCEMENT] Railway response:",result);
 
     setTimeout(()=>{
-      if(msg && msg.textContent.includes("نجحت العملية")){
+      if(msg){
         msg.textContent=enabled
           ? "🟢 الإعلان مفعّل على البث."
           : "⏹️ الإعلان متوقف.";
@@ -1881,8 +1883,8 @@ window.saveAnnouncement = async function(enabled){
     },5000);
 
   }catch(e){
-    console.error("[ANNOUNCEMENT] Failed:",e);
-    setMsg(enabled
+    console.error("saveAnnouncement:",e);
+    setStatus(enabled
       ? "🔴 فشلت العملية — الإعلان لم يُطبّق على البث."
       : "🔴 فشلت العملية — لم يتم إيقاف الإعلان من البث.");
     alert("❌ فشلت العملية\n\n"+(e?.message||e));
