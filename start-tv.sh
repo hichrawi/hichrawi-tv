@@ -6,6 +6,7 @@ SOURCE_FILE="/app/source.json"
 REQUEST_FILE="/app/source_request.json"
 STATE_FILE="/app/stream_state.json"
 LOG_FILE="/tmp/tv.log"
+
 ANNOUNCEMENT_FILE="/stream/announcement.json"
 ANNOUNCEMENT_TEXT_FILE="/stream/announcement.txt"
 ANNOUNCEMENT_SIGNATURE=""
@@ -19,9 +20,9 @@ ACTIVE_NAME=""
 
 CURRENT_PID=""
 
-
 resolve_local_source() {
     local value="$1"
+
     if [[ "$value" == /videos/* ]]; then
         printf '/app%s\n' "$value"
     else
@@ -135,12 +136,63 @@ load_announcement() {
 
     ANNOUNCEMENT_SIGNATURE="$(sha256sum "$ANNOUNCEMENT_FILE" 2>/dev/null | awk '{print $1}')"
 
-    ANNOUNCEMENT_DATA="$(python3 -c 'import json,sys; from pathlib import Path; p=Path(sys.argv[1]); d=json.loads(p.read_text(encoding="utf-8")) if p.exists() else {}; enabled=bool(d.get("enabled",False)); text=str(d.get("text","") or "").strip();speed=0.05; size=int(float(str(d.get("fontSize",20) or 20).strip().lower().replace("px",""))); bg=str(d.get("bgColor",d.get("backgroundColor","#e00000")) or "#e00000").lstrip("#"); fg=str(d.get("textColor",d.get("color","#ffffff")) or "#ffffff").lstrip("#"); speed=max(0.05,min(speed,1.0)); size=max(18,min(size,80)); bg=bg if len(bg)==6 else "e00000"; fg=fg if len(fg)==6 else "ffffff"; print(("true" if enabled and text else "false")+"\t"+text.replace("\t"," ")+"\t"+str(speed)+"\t"+str(size)+"\t0x"+bg+"\t0x"+fg)' "$ANNOUNCEMENT_FILE")"
+    ANNOUNCEMENT_DATA="$(python3 -c '
+import json,sys
+from pathlib import Path
 
-    IFS=$'\t' read -r ANNOUNCEMENT_ENABLED ANNOUNCEMENT_TEXT ANNOUNCEMENT_SPEED ANNOUNCEMENT_SIZE ANNOUNCEMENT_BG ANNOUNCEMENT_FG <<< "$ANNOUNCEMENT_DATA"
+p=Path(sys.argv[1])
+
+try:
+    d=json.loads(p.read_text(encoding="utf-8"))
+except Exception:
+    d={}
+
+enabled=bool(d.get("enabled",False))
+text=str(d.get("text","") or "").strip()
+
+try:
+    speed=float(d.get("speed",3) or 3)
+except Exception:
+    speed=3
+
+try:
+    size=int(float(str(d.get("fontSize",20) or 20).strip().lower().replace("px","")))
+except Exception:
+    size=20
+
+bg=str(d.get("bgColor",d.get("backgroundColor","#e00000")) or "#e00000").lstrip("#")
+fg=str(d.get("textColor",d.get("color","#ffffff")) or "#ffffff").lstrip("#")
+
+speed=max(0.2,min(speed,20))
+size=max(18,min(size,80))
+
+if len(bg)!=6:
+    bg="e00000"
+
+if len(fg)!=6:
+    fg="ffffff"
+
+print(
+    ("true" if enabled and text else "false")
+    + "\t" + text.replace("\t"," ")
+    + "\t" + str(speed)
+    + "\t" + str(size)
+    + "\t0x" + bg
+    + "\t0x" + fg
+)
+' "$ANNOUNCEMENT_FILE")"
+
+    IFS=$'\t' read -r \
+        ANNOUNCEMENT_ENABLED \
+        ANNOUNCEMENT_TEXT \
+        ANNOUNCEMENT_SPEED \
+        ANNOUNCEMENT_SIZE \
+        ANNOUNCEMENT_BG \
+        ANNOUNCEMENT_FG <<< "$ANNOUNCEMENT_DATA"
 
     if [ "$ANNOUNCEMENT_ENABLED" = "true" ]; then
         printf '%s' "$ANNOUNCEMENT_TEXT" > "$ANNOUNCEMENT_TEXT_FILE"
+
         log "ANNOUNCEMENT: enabled text='$ANNOUNCEMENT_TEXT' speed=$ANNOUNCEMENT_SPEED size=$ANNOUNCEMENT_SIZE"
     else
         rm -f "$ANNOUNCEMENT_TEXT_FILE"
@@ -148,9 +200,49 @@ load_announcement() {
     fi
 }
 
+# ============================================================
+# YOUTUBE RESOLVER
+# ============================================================
+
+resolve_youtube_source() {
+    local source="$1"
+
+    if [[ "$source" == *"youtube.com/"* || "$source" == *"youtu.be/"* ]]; then
+
+        log "YOUTUBE: Resolving direct stream URL..."
+
+        local direct_url
+
+        direct_url="$(python3 /app/youtube_runner.py "$source" 2>>"$LOG_FILE")"
+
+        if [ -z "$direct_url" ]; then
+            log "YOUTUBE: Failed to resolve direct stream URL."
+            return 1
+        fi
+
+        log "YOUTUBE: Direct stream URL resolved."
+
+        printf '%s\n' "$direct_url"
+        return 0
+    fi
+
+    printf '%s\n' "$source"
+}
+
 start_ffmpeg() {
     local source="$1"
     local slot="$2"
+
+    # YouTube: resolve الرابط قبل تشغيل FFmpeg
+    if [[ "$source" == *"youtube.com/"* || "$source" == *"youtu.be/"* ]]; then
+
+        log "YOUTUBE: Source detected."
+
+        source="$(resolve_youtube_source "$source")" || {
+            log "YOUTUBE: Could not resolve source."
+            return 1
+        }
+    fi
 
     local playlist="$STREAM_ROOT/source_${slot}.m3u8"
     local segment="$STREAM_ROOT/${slot}_%06d.ts"
@@ -164,19 +256,28 @@ start_ffmpeg() {
 
     local font
     local filter
+
     font="$(announcement_font)"
 
     if [ "$ANNOUNCEMENT_ENABLED" = "true" ]; then
-        filter="[1:v]scale=180:-1[logo];[0:v][logo]overlay=W-w-30:30[base];"
-        filter+="[base]drawbox=x=0:y=ih-55:w=iw:h=55:color=${ANNOUNCEMENT_BG}@0.92:t=fill[bar];"
+
+        filter="[1:v]scale=180:-1[logo];"
+        filter+="[0:v][logo]overlay=W-w-30:30[base];"
+        filter+="[base]drawbox=x=0:y=h-70:w=iw:h=70:color=${ANNOUNCEMENT_BG}@0.92:t=fill[bar];"
         filter+="[bar]drawtext=fontfile=${font}:textfile=${ANNOUNCEMENT_TEXT_FILE}:reload=1:"
         filter+="fontsize=${ANNOUNCEMENT_SIZE}:fontcolor=${ANNOUNCEMENT_FG}:"
-        filter+="borderw=1:bordercolor=0x000000@0.65:"
-        filter+="x=-tw+mod(t*${ANNOUNCEMENT_SPEED}*(tw+w)\,tw+w):y=h-th-19,"
+        filter+="x=w-mod(t*${ANNOUNCEMENT_SPEED}*(tw+w),tw+w):"
+        filter+="y=h-th-22:"
         filter+="format=yuv420p[outv]"
+
         log "ANNOUNCEMENT FILTER ACTIVE."
+
     else
-        filter="[1:v]scale=180:-1[logo];[0:v][logo]overlay=W-w-30:30,format=yuv420p[outv]"
+
+        filter="[1:v]scale=180:-1[logo];"
+        filter+="[0:v][logo]overlay=W-w-30:30,"
+        filter+="format=yuv420p[outv]"
+
     fi
 
     ffmpeg \
@@ -228,6 +329,7 @@ start_ffmpeg() {
     FFMPEG_PID=$!
 
     echo "[TV] FFmpeg PID: $FFMPEG_PID" >> "$ffmpeg_log"
+
     log "FFmpeg slot $slot PID=$FFMPEG_PID log=$ffmpeg_log"
 }
 
@@ -241,15 +343,22 @@ wait_ready() {
     for i in $(seq 1 60); do
 
         if ! kill -0 "$pid" 2>/dev/null; then
+
             log "FFmpeg slot $slot stopped before ready."
+
             debug_log="$STREAM_ROOT/ffmpeg_${slot}.log"
+
             if [ -f "$debug_log" ]; then
                 log "========== FFmpeg slot $slot ERROR =========="
-                tail -n 120 "$debug_log" | while IFS= read -r line; do
+
+                tail -n 120 "$debug_log" |
+                while IFS= read -r line; do
                     log "FFMPEG-$slot: $line"
                 done
+
                 log "========== END FFmpeg slot $slot ERROR =========="
             fi
+
             return 1
         fi
 
@@ -282,10 +391,6 @@ publish_playlist() {
         return 1
     fi
 
-    # Do NOT copy the playlist. A copied playlist becomes stale while
-    # FFmpeg continues updating source_${slot}.m3u8.
-    # Use an atomic symlink switch so the public playlist always follows
-    # the currently active FFmpeg playlist.
     rm -f "$temp_link"
 
     ln -s "$source_playlist" "$temp_link" || return 1
@@ -345,20 +450,33 @@ switch_source() {
     local old_pid
     local new_pid
 
-   requested_source=$(
-    python3 - "$REQUEST_FILE" <<'PY'
-import json, sys
+    requested_source=$(python3 - "$REQUEST_FILE" <<'PY'
+import json
+import sys
 
 try:
     with open(sys.argv[1], "r", encoding="utf-8") as f:
         data = json.load(f)
 
-    source = str(data.get("url") or data.get("source") or "").strip()
+    source = str(
+        data.get("url")
+        or data.get("source")
+        or ""
+    ).strip()
 
     if not source:
         items = data.get("items") or []
+
         if isinstance(items, list):
             for item in items:
+
+                if isinstance(item, dict):
+                    item = (
+                        item.get("url")
+                        or item.get("source")
+                        or ""
+                    )
+
                 if str(item or "").strip():
                     source = str(item).strip()
                     break
@@ -372,11 +490,15 @@ except Exception:
     print("")
 PY
 )
+
     requested_source=$(resolve_local_source "$requested_source")
 
     if [ -z "$requested_source" ]; then
+
         log "SOURCE REQUEST: missing URL/source/items."
+
         rm -f "$REQUEST_FILE"
+
         return
     fi
 
@@ -387,8 +509,11 @@ PY
     fi
 
     if [ "$requested_source" = "$ACTIVE_SOURCE" ]; then
+
         log "SOURCE REQUEST: source already active."
+
         rm -f "$REQUEST_FILE"
+
         return
     fi
 
@@ -414,7 +539,21 @@ PY
         "$ACTIVE_SLOT" \
         "Testing new source"
 
-    start_ffmpeg "$requested_source" "$new_slot"
+    if ! start_ffmpeg "$requested_source" "$new_slot"; then
+
+        log "SOURCE: FFmpeg could not start."
+
+        write_state \
+            "active" \
+            "$ACTIVE_SOURCE" \
+            "$ACTIVE_NAME" \
+            "$ACTIVE_SLOT" \
+            "New source could not start"
+
+        rm -f "$REQUEST_FILE"
+
+        return
+    fi
 
     new_pid="$FFMPEG_PID"
 
@@ -466,7 +605,6 @@ PY
         return
     fi
 
-    # التبديل تم بنجاح.
     ACTIVE_SOURCE="$requested_source"
     ACTIVE_NAME="$requested_name"
     ACTIVE_SLOT="$new_slot"
@@ -489,7 +627,6 @@ PY
 
     rm -f "$REQUEST_FILE"
 
-    # نخلي المصدر الجديد يخدم شوية قبل إيقاف القديم.
     sleep 8
 
     log "Stopping old FFmpeg PID: $old_pid"
@@ -502,6 +639,7 @@ PY
 }
 
 apply_announcement_change() {
+
     local new_slot
     local old_slot
     local old_pid
@@ -527,33 +665,51 @@ apply_announcement_change() {
         "$ACTIVE_SLOT" \
         "Applying announcement"
 
-    start_ffmpeg "$ACTIVE_SOURCE" "$new_slot"
+    if ! start_ffmpeg "$ACTIVE_SOURCE" "$new_slot"; then
+
+        log "ANNOUNCEMENT: FFmpeg could not start."
+
+        return
+    fi
+
     new_pid="$FFMPEG_PID"
 
     if ! wait_ready "$new_slot" "$new_pid"; then
+
         log "ANNOUNCEMENT: new stream failed readiness; keeping current stream."
-        log "ANNOUNCEMENT: FFmpeg diagnostics:"
+
         debug_log="$STREAM_ROOT/ffmpeg_${new_slot}.log"
+
         if [ -f "$debug_log" ]; then
-            tail -n 100 "$debug_log" | while IFS= read -r line; do
+
+            log "ANNOUNCEMENT: FFmpeg diagnostics:"
+
+            tail -n 100 "$debug_log" |
+            while IFS= read -r line; do
                 log "FFMPEG-${new_slot}: $line"
             done
         fi
+
         stop_pid "$new_pid"
         cleanup_slot "$new_slot"
+
         write_state \
             "active" \
             "$ACTIVE_SOURCE" \
             "$ACTIVE_NAME" \
             "$ACTIVE_SLOT" \
             "Announcement update failed; current stream kept"
+
         return
     fi
 
     if ! publish_playlist "$new_slot"; then
+
         log "ANNOUNCEMENT: failed to publish new playlist; keeping current stream."
+
         stop_pid "$new_pid"
         cleanup_slot "$new_slot"
+
         return
     fi
 
@@ -568,9 +724,13 @@ apply_announcement_change() {
         "Announcement applied"
 
     log "ANNOUNCEMENT CHANGE APPLIED."
+
     sleep 8
+
     stop_pid "$old_pid"
+
     cleanup_slot "$old_slot"
+
     log "Old announcement stream stopped."
 }
 
@@ -589,9 +749,9 @@ log "========================================"
 cleanup_slot "a"
 cleanup_slot "b"
 
-# Remove only the public playlist link from a previous container.
-# FFmpeg owns the source_a/source_b playlists.
-rm -f "$STREAM_ROOT/stream.m3u8" "$STREAM_ROOT/stream.m3u8.switch"
+rm -f \
+    "$STREAM_ROOT/stream.m3u8" \
+    "$STREAM_ROOT/stream.m3u8.switch"
 
 load_main_source
 
@@ -604,28 +764,37 @@ write_state \
     "$ACTIVE_SLOT" \
     "Starting main source"
 
-start_ffmpeg "$ACTIVE_SOURCE" "$ACTIVE_SLOT"
+if start_ffmpeg "$ACTIVE_SOURCE" "$ACTIVE_SLOT"; then
 
-CURRENT_PID="$FFMPEG_PID"
+    CURRENT_PID="$FFMPEG_PID"
 
-if wait_ready "$ACTIVE_SLOT" "$CURRENT_PID"; then
+    if wait_ready "$ACTIVE_SLOT" "$CURRENT_PID"; then
 
-    publish_playlist "$ACTIVE_SLOT"
+        publish_playlist "$ACTIVE_SLOT"
 
-    write_state \
-        "active" \
-        "$ACTIVE_SOURCE" \
-        "$ACTIVE_NAME" \
-        "$ACTIVE_SLOT" \
-        "HICHRAWI-TV LIVE"
+        write_state \
+            "active" \
+            "$ACTIVE_SOURCE" \
+            "$ACTIVE_NAME" \
+            "$ACTIVE_SLOT" \
+            "HICHRAWI-TV LIVE"
 
-    log "HICHRAWI-TV LIVE."
+        log "HICHRAWI-TV LIVE."
+
+    else
+
+        log "Main source failed to become ready."
+
+        stop_pid "$CURRENT_PID"
+
+        CURRENT_PID=""
+
+        sleep 5
+    fi
 
 else
 
-    log "Main source failed to become ready."
-
-    stop_pid "$CURRENT_PID"
+    log "Main source could not start."
 
     CURRENT_PID=""
 
@@ -637,13 +806,14 @@ fi
 # ============================================================
 
 load_announcement
+
 ANNOUNCEMENT_SIGNATURE="${ANNOUNCEMENT_SIGNATURE:-}"
 
 while true
 do
 
     # --------------------------------------------------------
-    # إذا FFmpeg الحالي مات
+    # FFmpeg died
     # --------------------------------------------------------
 
     if [ -z "$CURRENT_PID" ] || ! kill -0 "$CURRENT_PID" 2>/dev/null; then
@@ -657,51 +827,70 @@ do
             "$ACTIVE_SLOT" \
             "Restarting active source"
 
-        start_ffmpeg "$ACTIVE_SOURCE" "$ACTIVE_SLOT"
+        if start_ffmpeg "$ACTIVE_SOURCE" "$ACTIVE_SLOT"; then
 
-        CURRENT_PID="$FFMPEG_PID"
+            CURRENT_PID="$FFMPEG_PID"
 
-        if wait_ready "$ACTIVE_SLOT" "$CURRENT_PID"; then
+            if wait_ready "$ACTIVE_SLOT" "$CURRENT_PID"; then
 
-            publish_playlist "$ACTIVE_SLOT"
+                publish_playlist "$ACTIVE_SLOT"
 
-            write_state \
-                "active" \
-                "$ACTIVE_SOURCE" \
-                "$ACTIVE_NAME" \
-                "$ACTIVE_SLOT" \
-                "Stream active"
+                write_state \
+                    "active" \
+                    "$ACTIVE_SOURCE" \
+                    "$ACTIVE_NAME" \
+                    "$ACTIVE_SLOT" \
+                    "Stream active"
 
-            log "HICHRAWI-TV LIVE."
+                log "HICHRAWI-TV LIVE."
+
+            else
+
+                log "Current source could not be recovered."
+
+                stop_pid "$CURRENT_PID"
+
+                CURRENT_PID=""
+
+                sleep 5
+
+                continue
+            fi
 
         else
-
-            log "Current source could not be recovered."
-
-            stop_pid "$CURRENT_PID"
 
             CURRENT_PID=""
 
             sleep 5
+
             continue
         fi
     fi
 
     # --------------------------------------------------------
-    # مراقبة الإعلان
+    # Announcement
     # --------------------------------------------------------
 
     if [ -f "$ANNOUNCEMENT_FILE" ]; then
-        NEW_ANNOUNCEMENT_SIGNATURE="$(sha256sum "$ANNOUNCEMENT_FILE" 2>/dev/null | awk '{print $1}')"
-        if [ -n "$NEW_ANNOUNCEMENT_SIGNATURE" ] && [ "$NEW_ANNOUNCEMENT_SIGNATURE" != "$ANNOUNCEMENT_SIGNATURE" ]; then
+
+        NEW_ANNOUNCEMENT_SIGNATURE="$(
+            sha256sum "$ANNOUNCEMENT_FILE" 2>/dev/null |
+            awk '{print $1}'
+        )"
+
+        if [ -n "$NEW_ANNOUNCEMENT_SIGNATURE" ] &&
+           [ "$NEW_ANNOUNCEMENT_SIGNATURE" != "$ANNOUNCEMENT_SIGNATURE" ]; then
+
             log "ANNOUNCEMENT CHANGE DETECTED."
+
             ANNOUNCEMENT_SIGNATURE="$NEW_ANNOUNCEMENT_SIGNATURE"
+
             apply_announcement_change
         fi
     fi
 
     # --------------------------------------------------------
-    # طلب تبديل مصدر
+    # Source request
     # --------------------------------------------------------
 
     if [ -f "$REQUEST_FILE" ]; then
