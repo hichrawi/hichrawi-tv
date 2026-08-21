@@ -6,6 +6,10 @@ SOURCE_FILE="/app/source.json"
 REQUEST_FILE="/app/source_request.json"
 STATE_FILE="/app/stream_state.json"
 LOG_FILE="/tmp/tv.log"
+ANNOUNCEMENT_FILE="/stream/announcement.json"
+ANNOUNCEMENT_TEXT_FILE="/stream/announcement.txt"
+ANNOUNCEMENT_SIGNATURE=""
+ANNOUNCEMENT_ENABLED="false"
 
 STREAM_ROOT="/stream"
 
@@ -112,6 +116,67 @@ stop_pid() {
     fi
 }
 
+announcement_font() {
+    if [ -f "/usr/share/fonts/truetype/noto/NotoSansArabic-Regular.ttf" ]; then
+        printf '%s\n' "/usr/share/fonts/truetype/noto/NotoSansArabic-Regular.ttf"
+    elif [ -f "/usr/share/fonts/truetype/noto/NotoNaskhArabic-Regular.ttf" ]; then
+        printf '%s\n' "/usr/share/fonts/truetype/noto/NotoNaskhArabic-Regular.ttf"
+    else
+        printf '%s\n' "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
+    fi
+}
+
+load_announcement() {
+    local raw
+    if [ ! -f "$ANNOUNCEMENT_FILE" ]; then
+        ANNOUNCEMENT_ENABLED="false"
+        ANNOUNCEMENT_SIGNATURE=""
+        return
+    fi
+
+    raw=$(cat "$ANNOUNCEMENT_FILE" 2>/dev/null || true)
+    ANNOUNCEMENT_SIGNATURE=$(printf '%s' "$raw" | sha256sum | awk '{print $1}')
+
+    eval "$(
+        python3 - "$ANNOUNCEMENT_FILE" <<'PY'
+import json, sys
+from pathlib import Path
+try:
+    d=json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+except Exception:
+    d={}
+enabled=bool(d.get("enabled", False))
+text=str(d.get("text","") or "").strip()
+try: speed=float(d.get("speed",18) or 18)
+except Exception: speed=18
+try: size=int(d.get("fontSize",20) or 20)
+except Exception: size=20
+bg=str(d.get("bgColor", d.get("backgroundColor","#e00000")) or "#e00000").lstrip("#")
+fg=str(d.get("textColor", d.get("color","#ffffff")) or "#ffffff").lstrip("#")
+if len(bg) != 6: bg="e00000"
+if len(fg) != 6: fg="ffffff"
+speed=max(1,min(speed,100))
+size=max(18,min(size,80))
+# shell-safe values
+def q(s): return "'" + s.replace("'", "'\"'\"'") + "'"
+print("ANNOUNCEMENT_ENABLED=" + q("true" if enabled and text else "false"))
+print("ANNOUNCEMENT_TEXT=" + q(text))
+print("ANNOUNCEMENT_SPEED=" + q(str(speed)))
+print("ANNOUNCEMENT_SIZE=" + q(str(size)))
+print("ANNOUNCEMENT_BG=" + q("0x"+bg))
+print("ANNOUNCEMENT_FG=" + q("0x"+fg))
+PY
+    )"
+
+    if [ "$ANNOUNCEMENT_ENABLED" = "true" ]; then
+        printf '%s' "$ANNOUNCEMENT_TEXT" > "$ANNOUNCEMENT_TEXT_FILE"
+        log "ANNOUNCEMENT: enabled text='$ANNOUNCEMENT_TEXT' speed=$ANNOUNCEMENT_SPEED size=$ANNOUNCEMENT_SIZE"
+    else
+        rm -f "$ANNOUNCEMENT_TEXT_FILE"
+        log "ANNOUNCEMENT: disabled"
+    fi
+}
+
 start_ffmpeg() {
     local source="$1"
     local slot="$2"
@@ -122,6 +187,24 @@ start_ffmpeg() {
     cleanup_slot "$slot"
 
     log "Starting FFmpeg in slot $slot: $source"
+
+    load_announcement
+
+    local font
+    local filter
+    font="$(announcement_font)"
+
+    if [ "$ANNOUNCEMENT_ENABLED" = "true" ]; then
+        filter="[1:v]scale=180:-1[logo];[0:v][logo]overlay=W-w-30:30[base];"
+        filter+="[base]drawbox=x=0:y=h-90:w=w:h=90:color=${ANNOUNCEMENT_BG}@0.92:t=fill[bar];"
+        filter+="[bar]drawtext=fontfile=${font}:textfile=${ANNOUNCEMENT_TEXT_FILE}:reload=1:"
+        filter+="fontsize=${ANNOUNCEMENT_SIZE}:fontcolor=${ANNOUNCEMENT_FG}:text_shaping=1:"
+        filter+="x=w-mod(t*${ANNOUNCEMENT_SPEED}*(tw+w),tw+w):y=h-th-28:"
+        filter+="box=0:fix_bounds=1,format=yuv420p[outv]"
+        log "ANNOUNCEMENT FILTER ACTIVE."
+    else
+        filter="[1:v]scale=180:-1[logo];[0:v][logo]overlay=W-w-30:30,format=yuv420p[outv]"
+    fi
 
     ffmpeg \
         -hide_banner \
@@ -138,8 +221,7 @@ start_ffmpeg() {
         -framerate 25 \
         -thread_queue_size 64 \
         -i "/app/hichrawi-logo-crop.png" \
-        -filter_complex \
-        "[1:v]scale=180:-1[logo];[0:v][logo]overlay=W-w-30:30,format=yuv420p[outv]" \
+        -filter_complex "$filter" \
         -map "[outv]" \
         -map 0:a:0? \
         -c:v libx264 \
@@ -431,6 +513,72 @@ PY
     log "Old source stopped."
 }
 
+apply_announcement_change() {
+    local new_slot
+    local old_slot
+    local old_pid
+    local new_pid
+
+    if [ "$ACTIVE_SLOT" = "a" ]; then
+        new_slot="b"
+    else
+        new_slot="a"
+    fi
+
+    old_slot="$ACTIVE_SLOT"
+    old_pid="$CURRENT_PID"
+
+    log "========================================"
+    log "ANNOUNCEMENT CHANGE REQUEST"
+    log "========================================"
+
+    write_state \
+        "testing" \
+        "$ACTIVE_SOURCE" \
+        "$ACTIVE_NAME" \
+        "$ACTIVE_SLOT" \
+        "Applying announcement"
+
+    start_ffmpeg "$ACTIVE_SOURCE" "$new_slot"
+    new_pid="$FFMPEG_PID"
+
+    if ! wait_ready "$new_slot" "$new_pid"; then
+        log "ANNOUNCEMENT: new stream failed readiness; keeping current stream."
+        stop_pid "$new_pid"
+        cleanup_slot "$new_slot"
+        write_state \
+            "active" \
+            "$ACTIVE_SOURCE" \
+            "$ACTIVE_NAME" \
+            "$ACTIVE_SLOT" \
+            "Announcement update failed; current stream kept"
+        return
+    fi
+
+    if ! publish_playlist "$new_slot"; then
+        log "ANNOUNCEMENT: failed to publish new playlist; keeping current stream."
+        stop_pid "$new_pid"
+        cleanup_slot "$new_slot"
+        return
+    fi
+
+    ACTIVE_SLOT="$new_slot"
+    CURRENT_PID="$new_pid"
+
+    write_state \
+        "active" \
+        "$ACTIVE_SOURCE" \
+        "$ACTIVE_NAME" \
+        "$ACTIVE_SLOT" \
+        "Announcement applied"
+
+    log "ANNOUNCEMENT CHANGE APPLIED."
+    sleep 8
+    stop_pid "$old_pid"
+    cleanup_slot "$old_slot"
+    log "Old announcement stream stopped."
+}
+
 # ============================================================
 # START
 # ============================================================
@@ -493,6 +641,9 @@ fi
 # MAIN LOOP
 # ============================================================
 
+load_announcement
+ANNOUNCEMENT_SIGNATURE="${ANNOUNCEMENT_SIGNATURE:-}"
+
 while true
 do
 
@@ -538,6 +689,19 @@ do
 
             sleep 5
             continue
+        fi
+    fi
+
+    # --------------------------------------------------------
+    # مراقبة الإعلان
+    # --------------------------------------------------------
+
+    if [ -f "$ANNOUNCEMENT_FILE" ]; then
+        NEW_ANNOUNCEMENT_SIGNATURE="$(sha256sum "$ANNOUNCEMENT_FILE" 2>/dev/null | awk '{print $1}')"
+        if [ -n "$NEW_ANNOUNCEMENT_SIGNATURE" ] && [ "$NEW_ANNOUNCEMENT_SIGNATURE" != "$ANNOUNCEMENT_SIGNATURE" ]; then
+            log "ANNOUNCEMENT CHANGE DETECTED."
+            ANNOUNCEMENT_SIGNATURE="$NEW_ANNOUNCEMENT_SIGNATURE"
+            apply_announcement_change
         fi
     fi
 
