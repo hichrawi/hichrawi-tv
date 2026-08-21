@@ -135,51 +135,9 @@ load_announcement() {
 
     ANNOUNCEMENT_SIGNATURE="$(sha256sum "$ANNOUNCEMENT_FILE" 2>/dev/null | awk '{print $1}')"
 
-    ANNOUNCEMENT_VALUES="$(python3 -c '
-import json, sys
-from pathlib import Path
+    ANNOUNCEMENT_DATA="$(python3 -c 'import json,sys; from pathlib import Path; p=Path(sys.argv[1]); d=json.loads(p.read_text(encoding="utf-8")) if p.exists() else {}; enabled=bool(d.get("enabled",False)); text=str(d.get("text","") or "").strip(); speed=float(d.get("speed",18) or 18); size=int(d.get("fontSize",20) or 20); bg=str(d.get("bgColor",d.get("backgroundColor","#e00000")) or "#e00000").lstrip("#"); fg=str(d.get("textColor",d.get("color","#ffffff")) or "#ffffff").lstrip("#"); speed=max(1,min(speed,100)); size=max(18,min(size,80)); bg=bg if len(bg)==6 else "e00000"; fg=fg if len(fg)==6 else "ffffff"; print(("true" if enabled and text else "false")+"\t"+text.replace("\t"," ")+"\t"+str(speed)+"\t"+str(size)+"\t0x"+bg+"\t0x"+fg)' "$ANNOUNCEMENT_FILE")"
 
-try:
-    d = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
-except Exception:
-    d = {}
-
-enabled = bool(d.get("enabled", False))
-text = str(d.get("text", "") or "").strip()
-
-try:
-    speed = float(d.get("speed", 18) or 18)
-except Exception:
-    speed = 18
-
-try:
-    size = int(d.get("fontSize", 20) or 20)
-except Exception:
-    size = 20
-
-bg = str(d.get("bgColor", d.get("backgroundColor", "#e00000")) or "#e00000").lstrip("#")
-fg = str(d.get("textColor", d.get("color", "#ffffff")) or "#ffffff").lstrip("#")
-
-if len(bg) != 6:
-    bg = "e00000"
-if len(fg) != 6:
-    fg = "ffffff"
-
-speed = max(1, min(speed, 100))
-size = max(18, min(size, 80))
-
-def shell_quote(v):
-    return "'" + str(v).replace("'", "'\"'\"'") + "'"
-
-print("ANNOUNCEMENT_ENABLED=" + shell_quote("true" if enabled and text else "false"))
-print("ANNOUNCEMENT_TEXT=" + shell_quote(text))
-print("ANNOUNCEMENT_SPEED=" + shell_quote(str(speed)))
-print("ANNOUNCEMENT_SIZE=" + shell_quote(str(size)))
-print("ANNOUNCEMENT_BG=" + shell_quote("0x" + bg))
-print("ANNOUNCEMENT_FG=" + shell_quote("0x" + fg))
-' "$ANNOUNCEMENT_FILE")"
-
-    eval "$ANNOUNCEMENT_VALUES"
+    IFS=$'\t' read -r ANNOUNCEMENT_ENABLED ANNOUNCEMENT_TEXT ANNOUNCEMENT_SPEED ANNOUNCEMENT_SIZE ANNOUNCEMENT_BG ANNOUNCEMENT_FG <<< "$ANNOUNCEMENT_DATA"
 
     if [ "$ANNOUNCEMENT_ENABLED" = "true" ]; then
         printf '%s' "$ANNOUNCEMENT_TEXT" > "$ANNOUNCEMENT_TEXT_FILE"
