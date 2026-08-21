@@ -168,7 +168,7 @@ start_ffmpeg() {
 
     if [ "$ANNOUNCEMENT_ENABLED" = "true" ]; then
         filter="[1:v]scale=180:-1[logo];[0:v][logo]overlay=W-w-30:30[base];"
-        filter+="[base]drawbox=x=0:y=h-90:w=w:h=90:color=${ANNOUNCEMENT_BG}@0.92:t=fill[bar];"
+        filter+="[base]drawbox=x=0:y=ih-90:w=iw:h=90:color=${ANNOUNCEMENT_BG}@0.92:t=fill[bar];"
         filter+="[bar]drawtext=fontfile=${font}:textfile=${ANNOUNCEMENT_TEXT_FILE}:reload=1:"
         filter+="fontsize=${ANNOUNCEMENT_SIZE}:fontcolor=${ANNOUNCEMENT_FG}:"
         filter+="x=w-mod(t*${ANNOUNCEMENT_SPEED}*(tw+w)\,tw+w):y=h-th-28,"
