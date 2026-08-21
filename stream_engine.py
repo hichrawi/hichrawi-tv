@@ -472,6 +472,7 @@ def main():
     global request_mtime, schedule_mtime, last_schedule_key, announcement_mtime
     logo_request_mtime = 0
     announcement_mtime = 0
+    announcement_signature = None
 
     write_state("starting")
     source = initial_source()
@@ -577,18 +578,33 @@ def main():
         # Watch announcement changes. Prepare a new HLS candidate with the
         # current source so the advertisement is applied safely without
         # changing the selected source.
+        # Watch announcement by CONTENT as well as mtime. This makes the
+        # engine detect atomic-replace writes on the shared /stream volume.
         try:
-            amt = ANNOUNCEMENT_FILE.stat().st_mtime
+            announcement_raw = ANNOUNCEMENT_FILE.read_text(
+                encoding="utf-8", errors="replace"
+            )
         except FileNotFoundError:
-            amt = 0
+            announcement_raw = ""
 
-        if amt and amt != announcement_mtime:
-            announcement_mtime = amt
+        try:
+            announcement_signature = (
+                hash(announcement_raw)
+                if announcement_raw
+                else None
+            )
+        except Exception:
+            announcement_signature = None
+
+        if announcement_signature != globals().get("_last_announcement_signature"):
+            globals()["_last_announcement_signature"] = announcement_signature
+
             announcement = read_announcement()
             log(
                 "ANNOUNCEMENT CHANGE DETECTED: "
                 + ("enabled" if announcement.get("enabled") else "disabled")
             )
+
             if source and source.get("type") not in (None, "", "stop"):
                 if switch_to(source):
                     log("ANNOUNCEMENT CHANGE APPLIED.")
