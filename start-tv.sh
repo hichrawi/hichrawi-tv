@@ -198,9 +198,9 @@ start_ffmpeg() {
         filter="[1:v]scale=180:-1[logo];[0:v][logo]overlay=W-w-30:30[base];"
         filter+="[base]drawbox=x=0:y=h-90:w=w:h=90:color=${ANNOUNCEMENT_BG}@0.92:t=fill[bar];"
         filter+="[bar]drawtext=fontfile=${font}:textfile=${ANNOUNCEMENT_TEXT_FILE}:reload=1:"
-        filter+="fontsize=${ANNOUNCEMENT_SIZE}:fontcolor=${ANNOUNCEMENT_FG}:text_shaping=1:"
+        filter+="fontsize=${ANNOUNCEMENT_SIZE}:fontcolor=${ANNOUNCEMENT_FG}:"
         filter+="x=w-mod(t*${ANNOUNCEMENT_SPEED}*(tw+w),tw+w):y=h-th-28:"
-        filter+="box=0:fix_bounds=1,format=yuv420p[outv]"
+filter+="format=yuv420p[outv]"
         log "ANNOUNCEMENT FILTER ACTIVE."
     else
         filter="[1:v]scale=180:-1[logo];[0:v][logo]overlay=W-w-30:30,format=yuv420p[outv]"
