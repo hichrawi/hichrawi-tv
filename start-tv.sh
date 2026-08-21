@@ -127,46 +127,59 @@ announcement_font() {
 }
 
 load_announcement() {
-    local raw
     if [ ! -f "$ANNOUNCEMENT_FILE" ]; then
         ANNOUNCEMENT_ENABLED="false"
         ANNOUNCEMENT_SIGNATURE=""
         return
     fi
 
-    raw=$(cat "$ANNOUNCEMENT_FILE" 2>/dev/null || true)
-    ANNOUNCEMENT_SIGNATURE=$(printf '%s' "$raw" | sha256sum | awk '{print $1}')
+    ANNOUNCEMENT_SIGNATURE="$(sha256sum "$ANNOUNCEMENT_FILE" 2>/dev/null | awk '{print $1}')"
 
-    eval "$(
-        python3 - "$ANNOUNCEMENT_FILE" <<'PY'
+    ANNOUNCEMENT_VALUES="$(python3 -c '
 import json, sys
 from pathlib import Path
+
 try:
-    d=json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+    d = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
 except Exception:
-    d={}
-enabled=bool(d.get("enabled", False))
-text=str(d.get("text","") or "").strip()
-try: speed=float(d.get("speed",18) or 18)
-except Exception: speed=18
-try: size=int(d.get("fontSize",20) or 20)
-except Exception: size=20
-bg=str(d.get("bgColor", d.get("backgroundColor","#e00000")) or "#e00000").lstrip("#")
-fg=str(d.get("textColor", d.get("color","#ffffff")) or "#ffffff").lstrip("#")
-if len(bg) != 6: bg="e00000"
-if len(fg) != 6: fg="ffffff"
-speed=max(1,min(speed,100))
-size=max(18,min(size,80))
-# shell-safe values
-def q(s): return "'" + s.replace("'", "'\"'\"'") + "'"
-print("ANNOUNCEMENT_ENABLED=" + q("true" if enabled and text else "false"))
-print("ANNOUNCEMENT_TEXT=" + q(text))
-print("ANNOUNCEMENT_SPEED=" + q(str(speed)))
-print("ANNOUNCEMENT_SIZE=" + q(str(size)))
-print("ANNOUNCEMENT_BG=" + q("0x"+bg))
-print("ANNOUNCEMENT_FG=" + q("0x"+fg))
-PY
-    )"
+    d = {}
+
+enabled = bool(d.get("enabled", False))
+text = str(d.get("text", "") or "").strip()
+
+try:
+    speed = float(d.get("speed", 18) or 18)
+except Exception:
+    speed = 18
+
+try:
+    size = int(d.get("fontSize", 20) or 20)
+except Exception:
+    size = 20
+
+bg = str(d.get("bgColor", d.get("backgroundColor", "#e00000")) or "#e00000").lstrip("#")
+fg = str(d.get("textColor", d.get("color", "#ffffff")) or "#ffffff").lstrip("#")
+
+if len(bg) != 6:
+    bg = "e00000"
+if len(fg) != 6:
+    fg = "ffffff"
+
+speed = max(1, min(speed, 100))
+size = max(18, min(size, 80))
+
+def shell_quote(v):
+    return "'" + str(v).replace("'", "'\"'\"'") + "'"
+
+print("ANNOUNCEMENT_ENABLED=" + shell_quote("true" if enabled and text else "false"))
+print("ANNOUNCEMENT_TEXT=" + shell_quote(text))
+print("ANNOUNCEMENT_SPEED=" + shell_quote(str(speed)))
+print("ANNOUNCEMENT_SIZE=" + shell_quote(str(size)))
+print("ANNOUNCEMENT_BG=" + shell_quote("0x" + bg))
+print("ANNOUNCEMENT_FG=" + shell_quote("0x" + fg))
+' "$ANNOUNCEMENT_FILE")"
+
+    eval "$ANNOUNCEMENT_VALUES"
 
     if [ "$ANNOUNCEMENT_ENABLED" = "true" ]; then
         printf '%s' "$ANNOUNCEMENT_TEXT" > "$ANNOUNCEMENT_TEXT_FILE"
@@ -183,6 +196,7 @@ start_ffmpeg() {
 
     local playlist="$STREAM_ROOT/source_${slot}.m3u8"
     local segment="$STREAM_ROOT/${slot}_%06d.ts"
+    local ffmpeg_log="$STREAM_ROOT/ffmpeg_${slot}.log"
 
     cleanup_slot "$slot"
 
@@ -198,9 +212,9 @@ start_ffmpeg() {
         filter="[1:v]scale=180:-1[logo];[0:v][logo]overlay=W-w-30:30[base];"
         filter+="[base]drawbox=x=0:y=h-90:w=w:h=90:color=${ANNOUNCEMENT_BG}@0.92:t=fill[bar];"
         filter+="[bar]drawtext=fontfile=${font}:textfile=${ANNOUNCEMENT_TEXT_FILE}:reload=1:"
-        filter+="fontsize=${ANNOUNCEMENT_SIZE}:fontcolor=${ANNOUNCEMENT_FG}:"
+        filter+="fontsize=${ANNOUNCEMENT_SIZE}:fontcolor=${ANNOUNCEMENT_FG}:text_shaping=1:"
         filter+="x=w-mod(t*${ANNOUNCEMENT_SPEED}*(tw+w),tw+w):y=h-th-28:"
-filter+="format=yuv420p[outv]"
+        filter+="box=0:fix_bounds=1,format=yuv420p[outv]"
         log "ANNOUNCEMENT FILTER ACTIVE."
     else
         filter="[1:v]scale=180:-1[logo];[0:v][logo]overlay=W-w-30:30,format=yuv420p[outv]"
@@ -250,11 +264,12 @@ filter+="format=yuv420p[outv]"
         -hls_allow_cache 0 \
         -hls_segment_filename "$segment" \
         "$playlist" \
-        >> "$LOG_FILE" 2>&1 &
+        > "$ffmpeg_log" 2>&1 &
 
     FFMPEG_PID=$!
 
-    echo "[TV] FFmpeg PID: $FFMPEG_PID" >> "$LOG_FILE"
+    echo "[TV] FFmpeg PID: $FFMPEG_PID" >> "$ffmpeg_log"
+    log "FFmpeg slot $slot PID=$FFMPEG_PID log=$ffmpeg_log"
 }
 
 wait_ready() {
@@ -268,6 +283,14 @@ wait_ready() {
 
         if ! kill -0 "$pid" 2>/dev/null; then
             log "FFmpeg slot $slot stopped before ready."
+            debug_log="$STREAM_ROOT/ffmpeg_${slot}.log"
+            if [ -f "$debug_log" ]; then
+                log "========== FFmpeg slot $slot ERROR =========="
+                tail -n 120 "$debug_log" | while IFS= read -r line; do
+                    log "FFMPEG-$slot: $line"
+                done
+                log "========== END FFmpeg slot $slot ERROR =========="
+            fi
             return 1
         fi
 
