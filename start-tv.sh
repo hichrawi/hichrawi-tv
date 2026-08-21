@@ -208,7 +208,7 @@ start_ffmpeg() {
 
     ffmpeg \
         -hide_banner \
-        -loglevel info \
+        -loglevel verbose \
         -reconnect 1 \
         -reconnect_streamed 1 \
         -reconnect_at_eof 1 \
@@ -381,7 +381,7 @@ try:
     print(source)
 except Exception:
     print("")
-PY
+PY 2> >(tee -a "$LOG_FILE" >&2)
     )
 
     requested_source=$(resolve_local_source "$requested_source")
@@ -544,6 +544,12 @@ apply_announcement_change() {
 
     if ! wait_ready "$new_slot" "$new_pid"; then
         log "ANNOUNCEMENT: new stream failed readiness; keeping current stream."
+        log "ANNOUNCEMENT: FFmpeg diagnostics:"
+        if [ -f "$LOG_FILE" ]; then
+            tail -n 100 "$LOG_FILE" | while IFS= read -r line; do
+                log "FFMPEG-DEBUG: $line"
+            done
+        fi
         stop_pid "$new_pid"
         cleanup_slot "$new_slot"
         write_state \
