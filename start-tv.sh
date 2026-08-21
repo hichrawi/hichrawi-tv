@@ -344,12 +344,16 @@ switch_source() {
     local old_pid
     local new_pid
 
-    requested_source=$(python3 - "$REQUEST_FILE" <<'PY'
+   requested_source=$(
+    python3 - "$REQUEST_FILE" 2> >(tee -a "$LOG_FILE" >&2) <<'PY'
 import json, sys
+
 try:
     with open(sys.argv[1], "r", encoding="utf-8") as f:
         data = json.load(f)
+
     source = str(data.get("url") or data.get("source") or "").strip()
+
     if not source:
         items = data.get("items") or []
         if isinstance(items, list):
@@ -357,14 +361,16 @@ try:
                 if str(item or "").strip():
                     source = str(item).strip()
                     break
+
     if source.startswith("/videos/"):
         source = "/app" + source
+
     print(source)
+
 except Exception:
     print("")
-PY 2> >(tee -a "$LOG_FILE" >&2)
-    )
-
+PY
+)
     requested_source=$(resolve_local_source "$requested_source")
 
     if [ -z "$requested_source" ]; then
