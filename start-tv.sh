@@ -171,7 +171,7 @@ start_ffmpeg() {
         filter+="[base]drawbox=x=0:y=h-90:w=w:h=90:color=${ANNOUNCEMENT_BG}@0.92:t=fill[bar];"
         filter+="[bar]drawtext=fontfile=${font}:textfile=${ANNOUNCEMENT_TEXT_FILE}:reload=1:"
         filter+="fontsize=${ANNOUNCEMENT_SIZE}:fontcolor=${ANNOUNCEMENT_FG}:"
-        filter+="x=w-mod(t*${ANNOUNCEMENT_SPEED}*(tw+w),tw+w):y=h-th-28:"
+        filter+="x=w-mod(t*${ANNOUNCEMENT_SPEED}*(tw+w)\,tw+w):y=h-th-28:"
         filter+="format=yuv420p[outv]"
         log "ANNOUNCEMENT FILTER ACTIVE."
     else
