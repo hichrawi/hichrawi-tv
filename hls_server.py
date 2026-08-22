@@ -7,6 +7,8 @@ import time
 import hashlib
 import threading
 import urllib.request
+import shutil
+import re
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from pathlib import Path
 
@@ -583,6 +585,82 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         parsed = urllib.parse.urlparse(self.path)
+
+        # Direct video upload endpoint. The browser sends the file as the raw
+        # request body, so large videos are streamed to /app/videos instead of
+        # being loaded into RAM or sent through Firebase Storage.
+        if parsed.path == "/api/upload-video":
+            try:
+                length = int(self.headers.get("Content-Length", "0"))
+            except Exception:
+                length = 0
+
+            if length <= 0:
+                self.send_json(400, {"ok": False, "error": "empty upload"})
+                return
+
+            # Keep a generous application-side limit. Railway/proxy limits,
+            # if any, may still apply before the request reaches this server.
+            max_upload = 2 * 1024 * 1024 * 1024
+            if length > max_upload:
+                self.send_json(413, {"ok": False, "error": "video too large"})
+                return
+
+            raw_name = urllib.parse.parse_qs(parsed.query).get("filename", [""])[0]
+            raw_name = os.path.basename(urllib.parse.unquote(raw_name or ""))
+            raw_name = re.sub(r"[^\w\u0600-\u06FF.\- ]", "_", raw_name).strip(" .")
+            if not raw_name:
+                self.send_json(400, {"ok": False, "error": "filename required"})
+                return
+
+            allowed = {".mp4", ".mkv", ".webm", ".mov", ".m4v", ".avi", ".ts", ".m2ts"}
+            suffix = Path(raw_name).suffix.lower()
+            if suffix not in allowed:
+                self.send_json(400, {"ok": False, "error": "unsupported video format"})
+                return
+
+            VIDEO_ROOT.mkdir(parents=True, exist_ok=True)
+            target = VIDEO_ROOT / raw_name
+            if target.exists():
+                stem = target.stem
+                ext = target.suffix
+                raw_name = f"{stem}_{int(time.time())}{ext}"
+                target = VIDEO_ROOT / raw_name
+
+            tmp = VIDEO_ROOT / ("." + raw_name + ".uploading")
+            written = 0
+            try:
+                with tmp.open("wb") as out:
+                    remaining = length
+                    while remaining > 0:
+                        chunk = self.rfile.read(min(1024 * 1024, remaining))
+                        if not chunk:
+                            raise IOError("upload connection ended early")
+                        out.write(chunk)
+                        written += len(chunk)
+                        remaining -= len(chunk)
+                tmp.replace(target)
+
+                rel = target.relative_to(VIDEO_ROOT).as_posix()
+                self.send_json(201, {
+                    "ok": True,
+                    "name": target.name,
+                    "filename": target.name,
+                    "path": rel,
+                    "serverPath": rel,
+                    "url": "/videos/" + urllib.parse.quote(rel, safe="/"),
+                    "size": written,
+                })
+            except Exception as e:
+                try:
+                    tmp.unlink()
+                except FileNotFoundError:
+                    pass
+                except Exception:
+                    pass
+                print("[HLS] VIDEO UPLOAD ERROR:", repr(e), flush=True)
+                self.send_json(500, {"ok": False, "error": str(e)})
+            return
 
         if parsed.path not in (
             "/api/source",
