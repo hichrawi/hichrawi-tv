@@ -283,10 +283,14 @@ start_ffmpeg() {
     ffmpeg \
         -hide_banner \
         -loglevel verbose \
+        -reconnect 1 \
+        -reconnect_streamed 1 \
+        -reconnect_at_eof 1 \
+        -reconnect_delay_max 10 \
         -rw_timeout 15000000 \
         -fflags +genpts+discardcorrupt \
         -thread_queue_size 2048 \
-        "${input_options[@]}" -i "$source"
+        -i "$source" \
         -loop 1 \
         -framerate 25 \
         -thread_queue_size 64 \
