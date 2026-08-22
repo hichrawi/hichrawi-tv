@@ -280,14 +280,24 @@ start_ffmpeg() {
 
     fi
 
+    local input_opts=()
+
+    if [[ "$source" == /app/videos/* ]]; then
+        input_opts=(-stream_loop -1)
+    else
+        input_opts=(
+            -reconnect 1
+            -reconnect_streamed 1
+            -reconnect_at_eof 1
+            -reconnect_delay_max 10
+            -rw_timeout 15000000
+        )
+    fi
+
     ffmpeg \
         -hide_banner \
         -loglevel verbose \
-        -reconnect 1 \
-        -reconnect_streamed 1 \
-        -reconnect_at_eof 1 \
-        -reconnect_delay_max 10 \
-        -rw_timeout 15000000 \
+        "${input_opts[@]}" \
         -fflags +genpts+discardcorrupt \
         -thread_queue_size 2048 \
         -i "$source" \
