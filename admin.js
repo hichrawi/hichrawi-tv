@@ -950,34 +950,55 @@ window.uploadVideoFile = async () => {
     }
 
     try{
-        setVideoManagerMessage("⏳ جاري رفع الفيديو...");
-        const safeName = file.name.replace(/[^\w\u0600-\u06FF.\- ]/g, "_");
-        const storageRef = ref(storage, `hichrawi-videos/${Date.now()}_${safeName}`);
+        setVideoManagerMessage("⏳ جاري رفع الفيديو إلى Railway... لا تغلق الصفحة.");
 
-        await uploadBytes(storageRef, file, {
-            contentType: file.type || "video/mp4"
+        const safeName = file.name.replace(/[^\w\u0600-\u06FF.\- ]/g, "_");
+        const uploadUrl = STREAM_ENGINE_URL + "/api/upload-video?filename=" + encodeURIComponent(safeName);
+        const user = auth.currentUser;
+        if(!user) throw new Error("انتهت جلسة الإدارة. سجل الدخول من جديد.");
+        const idToken = await user.getIdToken();
+
+        const response = await fetch(uploadUrl, {
+            method: "POST",
+            headers: {
+                "Content-Type": file.type || "application/octet-stream",
+                "Authorization": "Bearer " + idToken,
+                "X-Firebase-Api-Key": firebaseConfig.apiKey
+            },
+            body: file
         });
 
-        const url = await getDownloadURL(storageRef);
+        const raw = await response.text();
+        let result = {};
+        try{ result = raw ? JSON.parse(raw) : {}; }catch(_){ }
+
+        if(!response.ok || !result.ok){
+            throw new Error(result.error || raw || ("HTTP " + response.status));
+        }
+
+        const serverPath = result.serverPath || result.path || result.filename;
+        const url = STREAM_ENGINE_URL + "/videos/" + encodeURIComponent(serverPath).replace(/%2F/g, "/");
 
         await addDoc(collection(db, "videos"), {
             title,
             url,
-            storagePath: storageRef.fullPath,
+            serverPath,
             size: file.size,
             contentType: file.type || "",
+            storagePath: "",
             createdAt: new Date()
         });
 
         fileInput.value = "";
         if(titleInput) titleInput.value = "";
 
-        setVideoManagerMessage("✅ تم رفع الفيديو وإضافته للمكتبة.");
+        setVideoManagerMessage("✅ تم رفع الفيديو إلى Railway وإضافته للمكتبة.");
         await loadVideos();
         await loadPlaylists();
+        await loadServerVideos();
     }catch(error){
         console.error("uploadVideoFile:", error);
-        setVideoManagerMessage("❌ فشل الرفع. تأكد من تفعيل Firebase Storage وقواعده.", true);
+        setVideoManagerMessage("❌ فشل رفع الفيديو إلى Railway: " + (error.message || error), true);
     }
 };
 
